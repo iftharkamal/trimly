@@ -8,11 +8,14 @@ useHead({ title: 'Sign in · Trimly' })
 const route = useRoute()
 
 const schema = z.object({
-  email: z.email('Enter a valid email address'),
+  // Phone keyboards add capitals and trailing spaces; emails are case-insensitive.
+  email: z.string().trim().toLowerCase().pipe(z.email('Enter a valid email address')),
   password: z.string().min(1, 'Enter your password')
 })
 
 const state = reactive({ email: '', password: '' })
+// Lets people check what their keyboard actually typed.
+const showPassword = ref(false)
 const submitting = ref(false)
 const errorMessage = ref<string | null>(null)
 
@@ -85,7 +88,11 @@ async function onSubmit(event: FormSubmitEvent<z.output<typeof schema>>) {
             <UInput
               v-model="state.email"
               type="email"
+              inputmode="email"
               autocomplete="email"
+              autocapitalize="none"
+              autocorrect="off"
+              spellcheck="false"
               size="lg"
               class="w-full"
               autofocus
@@ -98,11 +105,27 @@ async function onSubmit(event: FormSubmitEvent<z.output<typeof schema>>) {
           >
             <UInput
               v-model="state.password"
-              type="password"
+              :type="showPassword ? 'text' : 'password'"
               autocomplete="current-password"
+              autocapitalize="none"
+              autocorrect="off"
+              spellcheck="false"
               size="lg"
               class="w-full"
-            />
+              :ui="{ trailing: 'pe-1' }"
+            >
+              <template #trailing>
+                <UButton
+                  :icon="showPassword ? 'i-lucide-eye-off' : 'i-lucide-eye'"
+                  :aria-label="showPassword ? 'Hide password' : 'Show password'"
+                  :aria-pressed="showPassword"
+                  color="neutral"
+                  variant="link"
+                  size="sm"
+                  @click="showPassword = !showPassword"
+                />
+              </template>
+            </UInput>
           </UFormField>
 
           <UButton

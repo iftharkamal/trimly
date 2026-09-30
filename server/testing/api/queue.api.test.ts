@@ -580,3 +580,53 @@ describe('POST /api/queue/:id/complete with a payment', () => {
     expect(await useDb().select().from(payments)).toHaveLength(0)
   })
 })
+
+describe('GET /api/reports', () => {
+  function report(query = '', cookie: string | null = owner.cookie) {
+    return request('GET', `/api/reports${query}`, { cookie: cookie ?? undefined })
+  }
+
+  it('reports today by default, including a payment just taken', async () => {
+    const entryId = (await walkIn('Walk-in', shop.services.haircut)).json.data.entry.id as string
+    await act('start', entryId)
+    await request('POST', `/api/queue/${entryId}/complete`, {
+      body: { payment: { method: 'UPI', amountMinor: 15000 } },
+      cookie: owner.cookie
+    })
+
+    const response = await report()
+
+    expect(response.status).toBe(200)
+    expect(response.json.data).toMatchObject({
+      period: 'day',
+      nextDate: null,
+      currency: 'INR',
+      timezone: 'Asia/Kolkata',
+      totals: { revenueMinor: 15000, services: 1, customers: 1, payments: 1, averageBillMinor: 15000 },
+      trend: { unit: 'hour' }
+    })
+    expect(response.json.data.trend.buckets).toHaveLength(24)
+  })
+
+  it('supports weekly and monthly periods for any date', async () => {
+    const week = await report('?period=week&date=2026-09-30')
+    expect(week.json.data).toMatchObject({ period: 'week', start: '2026-09-28', end: '2026-10-05' })
+    expect(week.json.data.trend.buckets).toHaveLength(7)
+
+    const month = await report('?period=month&date=2026-02-10')
+    expect(month.json.data).toMatchObject({ period: 'month', start: '2026-02-01', end: '2026-03-01' })
+    expect(month.json.data.trend.buckets).toHaveLength(28)
+  })
+
+  it('validates the query (400)', async () => {
+    expectError(await report('?period=year'), 400, 'VALIDATION_ERROR')
+    expectError(await report('?date=2026-02-30'), 400, 'VALIDATION_ERROR')
+    expectError(await report('?date=30-09-2026'), 400, 'VALIDATION_ERROR')
+    expectError(await report('?period=day&shopId=someone-else'), 400, 'VALIDATION_ERROR')
+  })
+
+  it('requires the owner (401, 403)', async () => {
+    expectError(await report('', null), 401, 'UNAUTHENTICATED')
+    expectError(await report('', outsider.cookie), 403, 'FORBIDDEN')
+  })
+})

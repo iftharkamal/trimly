@@ -15,7 +15,7 @@ import {
   services,
   shops
 } from '../../db/schema'
-import { localDayRange } from '../day-range'
+import { localDayRange, type TimeRange } from '../day-range'
 import { DomainError } from '../errors'
 import { recordPayment } from '../payment.service'
 import {
@@ -222,6 +222,27 @@ export async function getTodayStats(shopId: string, now = new Date()): Promise<T
     .where(and(eq(queueEntries.shopId, shopId), or(joinedToday, endedToday)))
 
   return row ?? { customers: 0, servicesCompleted: 0 }
+}
+
+/**
+ * Work done in a time range: services completed, and how many different
+ * customers they were for.
+ */
+export async function getServiceSummary(shopId: string, range: TimeRange): Promise<{ services: number, customers: number }> {
+  const [row] = await useDb()
+    .select({
+      services: sql<number>`count(*)`.mapWith(Number),
+      customers: sql<number>`count(distinct ${queueEntries.customerId})`.mapWith(Number)
+    })
+    .from(queueEntries)
+    .where(and(
+      eq(queueEntries.shopId, shopId),
+      eq(queueEntries.status, 'COMPLETED'),
+      gte(queueEntries.endedAt, range.start),
+      lt(queueEntries.endedAt, range.end)
+    ))
+
+  return row ?? { services: 0, customers: 0 }
 }
 
 /** One entry's live status by its tracking code (the customer's view). */

@@ -27,3 +27,6 @@ export const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {
   CARD: 'Card',
   OTHER: 'Other'
 }
+
+export const REPORT_PERIODS = ['day', 'week', 'month'] as const
+export type ReportPeriod = (typeof REPORT_PERIODS)[number]

@@ -286,6 +286,48 @@ Open or close the shop to online joins. Walk-ins can always be added.
 
 **Errors:** 400 `VALIDATION_ERROR` · 401 `UNAUTHENTICATED` · 403 `FORBIDDEN`.
 
+### `GET /api/reports`
+
+Revenue, customers, services and average bill for a day, week or month, compared with the
+previous period, plus a revenue trend.
+
+- **Auth:** owner only.
+- **Query** (strict):
+
+| Param | Values | Notes |
+|---|---|---|
+| `period` | `day` | `week` | `month` | Default `day`. Weeks run Monday–Sunday |
+| `date` | `YYYY-MM-DD` | Any date inside the wanted period, in shop time. Default today; future dates are treated as today |
+
+- **200:**
+
+```json
+{
+  "data": {
+    "period": "week",
+    "start": "2026-09-28", "end": "2026-10-05",
+    "previous": { "start": "2026-09-21", "end": "2026-09-28" },
+    "previousDate": "2026-09-21", "nextDate": null,
+    "timezone": "Asia/Kolkata", "currency": "INR",
+    "totals": { "revenueMinor": 57000, "customers": 4, "services": 5, "payments": 4, "averageBillMinor": 14250 },
+    "previousTotals": { "revenueMinor": 50000, "customers": 4, "services": 4, "payments": 4, "averageBillMinor": 12500 },
+    "changes": { "revenue": 14, "customers": 0, "services": 25, "averageBill": 14 },
+    "trend": { "unit": "day", "buckets": [{ "key": "2026-09-28", "revenueMinor": 0 }, { "key": "2026-09-29", "revenueMinor": 10000 }] }
+  }
+}
+```
+
+- Dates are local calendar dates in the shop's timezone; `end` is exclusive.
+- **revenue** = `PAID` payments received in the period · **services** = services completed ·
+  **customers** = different customers among them · **averageBill** = revenue ÷ payments
+  (`null` when nothing was paid).
+- `changes` are whole-number percentages vs the previous period; `null` when the previous
+  value is 0 (nothing to compare).
+- `trend` buckets: 24 hours (`"00"`–`"23"`) for a day, one per date for a week or month.
+- `nextDate` is `null` for the current period.
+
+**Errors:** 400 `VALIDATION_ERROR` · 401 `UNAUTHENTICATED` · 403 `FORBIDDEN`.
+
 ## Tests
 
 `pnpm test:api` builds the app, starts it against the `_test` database and calls every

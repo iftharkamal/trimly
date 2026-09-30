@@ -80,6 +80,10 @@ export function parseParams<S extends z.ZodType>(event: H3Event, schema: S): z.o
   return validate(schema, getRouterParams(event), 'parameters')
 }
 
+export function parseQuery<S extends z.ZodType>(event: H3Event, schema: S): z.output<S> {
+  return validate(schema, getQuery(event), 'query')
+}
+
 export async function parseBody<S extends z.ZodType>(event: H3Event, schema: S): Promise<z.output<S>> {
   return validate(schema, await readBody(event), 'body')
 }

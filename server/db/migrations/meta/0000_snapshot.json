@@ -1,5 +1,5 @@
 {
-  "id": "08ec62bb-d97a-4ace-946a-660ca7d5c1ee",
+  "id": "14c81317-795d-47d4-88d3-293caf4dbec1",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -753,7 +753,7 @@
           "typeSchema": "public",
           "primaryKey": false,
           "notNull": true,
-          "default": "'waiting'"
+          "default": "'WAITING'"
         },
         "source": {
           "name": "source",
@@ -878,8 +878,8 @@
           "method": "btree",
           "with": {}
         },
-        "queue_entries_one_in_service_per_barber": {
-          "name": "queue_entries_one_in_service_per_barber",
+        "queue_entries_one_in_progress_per_barber": {
+          "name": "queue_entries_one_in_progress_per_barber",
           "columns": [
             {
               "expression": "barber_id",
@@ -889,7 +889,7 @@
             }
           ],
           "isUnique": true,
-          "where": "\"queue_entries\".\"status\" = 'in_service'",
+          "where": "\"queue_entries\".\"status\" = 'IN_PROGRESS'",
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -911,7 +911,7 @@
             }
           ],
           "isUnique": true,
-          "where": "\"queue_entries\".\"status\" in ('waiting', 'in_service')",
+          "where": "\"queue_entries\".\"status\" in ('WAITING', 'IN_PROGRESS')",
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -1017,19 +1017,31 @@
           "primaryKey": false,
           "notNull": true
         },
+        "status": {
+          "name": "status",
+          "type": "payment_status",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
         "method": {
           "name": "method",
           "type": "payment_method",
           "typeSchema": "public",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "paid_at": {
           "name": "paid_at",
           "type": "timestamp with time zone",
           "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
+          "notNull": false
+        },
+        "refunded_at": {
+          "name": "refunded_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
         },
         "created_at": {
           "name": "created_at",
@@ -1037,9 +1049,32 @@
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
         }
       },
-      "indexes": {},
+      "indexes": {
+        "payments_paid_at_idx": {
+          "name": "payments_paid_at_idx",
+          "columns": [
+            {
+              "expression": "paid_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
       "foreignKeys": {
         "payments_queue_entry_id_queue_entries_id_fk": {
           "name": "payments_queue_entry_id_queue_entries_id_fk",
@@ -1070,6 +1105,14 @@
         "payments_amount_non_negative": {
           "name": "payments_amount_non_negative",
           "value": "\"payments\".\"amount_minor\" >= 0"
+        },
+        "payments_paid_details": {
+          "name": "payments_paid_details",
+          "value": "\"payments\".\"status\" = 'PENDING' or (\"payments\".\"method\" is not null and \"payments\".\"paid_at\" is not null)"
+        },
+        "payments_refunded_at": {
+          "name": "payments_refunded_at",
+          "value": "(\"payments\".\"status\" = 'REFUNDED') = (\"payments\".\"refunded_at\" is not null)"
         }
       },
       "isRLSEnabled": false
@@ -1080,28 +1123,38 @@
       "name": "queue_entry_source",
       "schema": "public",
       "values": [
-        "online",
-        "walk_in"
+        "ONLINE",
+        "WALK_IN"
       ]
     },
     "public.queue_entry_status": {
       "name": "queue_entry_status",
       "schema": "public",
       "values": [
-        "waiting",
-        "in_service",
-        "completed",
-        "cancelled",
-        "no_show"
+        "WAITING",
+        "IN_PROGRESS",
+        "COMPLETED",
+        "CANCELLED",
+        "NO_SHOW"
       ]
     },
     "public.payment_method": {
       "name": "payment_method",
       "schema": "public",
       "values": [
-        "cash",
-        "card",
-        "other"
+        "CASH",
+        "UPI",
+        "CARD",
+        "OTHER"
+      ]
+    },
+    "public.payment_status": {
+      "name": "payment_status",
+      "schema": "public",
+      "values": [
+        "PENDING",
+        "PAID",
+        "REFUNDED"
       ]
     }
   },

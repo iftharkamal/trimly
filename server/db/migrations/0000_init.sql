@@ -1,6 +1,7 @@
-CREATE TYPE "public"."queue_entry_source" AS ENUM('online', 'walk_in');--> statement-breakpoint
-CREATE TYPE "public"."queue_entry_status" AS ENUM('waiting', 'in_service', 'completed', 'cancelled', 'no_show');--> statement-breakpoint
-CREATE TYPE "public"."payment_method" AS ENUM('cash', 'card', 'other');--> statement-breakpoint
+CREATE TYPE "public"."queue_entry_source" AS ENUM('ONLINE', 'WALK_IN');--> statement-breakpoint
+CREATE TYPE "public"."queue_entry_status" AS ENUM('WAITING', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED', 'NO_SHOW');--> statement-breakpoint
+CREATE TYPE "public"."payment_method" AS ENUM('CASH', 'UPI', 'CARD', 'OTHER');--> statement-breakpoint
+CREATE TYPE "public"."payment_status" AS ENUM('PENDING', 'PAID', 'REFUNDED');--> statement-breakpoint
 CREATE TABLE "account" (
 	"id" text PRIMARY KEY NOT NULL,
 	"account_id" text NOT NULL,
@@ -102,7 +103,7 @@ CREATE TABLE "queue_entries" (
 	"customer_id" uuid NOT NULL,
 	"service_id" uuid NOT NULL,
 	"tracking_code" uuid DEFAULT gen_random_uuid() NOT NULL,
-	"status" "queue_entry_status" DEFAULT 'waiting' NOT NULL,
+	"status" "queue_entry_status" DEFAULT 'WAITING' NOT NULL,
 	"source" "queue_entry_source" NOT NULL,
 	"service_name" text NOT NULL,
 	"duration_minutes" integer NOT NULL,
@@ -121,11 +122,16 @@ CREATE TABLE "payments" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"queue_entry_id" uuid NOT NULL,
 	"amount_minor" integer NOT NULL,
-	"method" "payment_method" NOT NULL,
-	"paid_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"status" "payment_status" NOT NULL,
+	"method" "payment_method",
+	"paid_at" timestamp with time zone,
+	"refunded_at" timestamp with time zone,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "payments_queue_entry_id_unique" UNIQUE("queue_entry_id"),
-	CONSTRAINT "payments_amount_non_negative" CHECK ("payments"."amount_minor" >= 0)
+	CONSTRAINT "payments_amount_non_negative" CHECK ("payments"."amount_minor" >= 0),
+	CONSTRAINT "payments_paid_details" CHECK ("payments"."status" = 'PENDING' or ("payments"."method" is not null and "payments"."paid_at" is not null)),
+	CONSTRAINT "payments_refunded_at" CHECK (("payments"."status" = 'REFUNDED') = ("payments"."refunded_at" is not null))
 );
 --> statement-breakpoint
 ALTER TABLE "account" ADD CONSTRAINT "account_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
@@ -146,5 +152,6 @@ CREATE INDEX "services_shop_id_idx" ON "services" USING btree ("shop_id");--> st
 CREATE INDEX "queue_entries_barber_lane_idx" ON "queue_entries" USING btree ("barber_id","status","joined_at");--> statement-breakpoint
 CREATE INDEX "queue_entries_shop_status_idx" ON "queue_entries" USING btree ("shop_id","status");--> statement-breakpoint
 CREATE INDEX "queue_entries_customer_id_idx" ON "queue_entries" USING btree ("customer_id");--> statement-breakpoint
-CREATE UNIQUE INDEX "queue_entries_one_in_service_per_barber" ON "queue_entries" USING btree ("barber_id") WHERE "queue_entries"."status" = 'in_service';--> statement-breakpoint
-CREATE UNIQUE INDEX "queue_entries_one_active_per_customer_shop" ON "queue_entries" USING btree ("shop_id","customer_id") WHERE "queue_entries"."status" in ('waiting', 'in_service');
+CREATE UNIQUE INDEX "queue_entries_one_in_progress_per_barber" ON "queue_entries" USING btree ("barber_id") WHERE "queue_entries"."status" = 'IN_PROGRESS';--> statement-breakpoint
+CREATE UNIQUE INDEX "queue_entries_one_active_per_customer_shop" ON "queue_entries" USING btree ("shop_id","customer_id") WHERE "queue_entries"."status" in ('WAITING', 'IN_PROGRESS');--> statement-breakpoint
+CREATE INDEX "payments_paid_at_idx" ON "payments" USING btree ("paid_at");

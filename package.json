@@ -11,6 +11,7 @@
     "typecheck": "nuxt typecheck",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
+    "db:seed": "jiti server/db/seed.ts",
     "db:studio": "drizzle-kit studio"
   },
   "pnpm": {
@@ -34,6 +35,7 @@
   "devDependencies": {
     "@types/pg": "^8.23.1",
     "drizzle-kit": "^0.31.11",
+    "jiti": "^2.7.0",
     "typescript": "^6.0.3",
     "vue-tsc": "^3.3.11"
   }

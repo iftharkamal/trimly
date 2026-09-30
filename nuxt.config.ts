@@ -25,5 +25,13 @@ export default defineNuxtConfig({
 
   typescript: {
     strict: true
+  },
+
+  vite: {
+    server: {
+      // Let `pnpm tunnel` (ngrok) reach the dev server for testing on a phone.
+      // Dev server only; production builds don't use this.
+      allowedHosts: ['.ngrok-free.app', '.ngrok-free.dev', '.ngrok.app']
+    }
   }
 })

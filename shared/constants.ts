@@ -44,3 +44,18 @@ export type BookingSource = (typeof BOOKING_SOURCES)[number]
 export const BOOKING_WINDOW_DAYS = 14
 export const BOOKING_NOTICE_MINUTES = 30
 export const SLOT_STEP_MINUTES = 15
+
+// Who a notification is for: the shop (barber dashboard) or one customer.
+export const NOTIFICATION_AUDIENCES = ['SHOP', 'CUSTOMER'] as const
+export type NotificationAudience = (typeof NOTIFICATION_AUDIENCES)[number]
+
+export const NOTIFICATION_TYPES = [
+  // To a customer
+  'QUEUE_GETTING_CLOSE',
+  // To the shop
+  'CUSTOMER_JOINED_ONLINE',
+  'CUSTOMER_LEFT_QUEUE',
+  'APPOINTMENT_BOOKED_ONLINE',
+  'APPOINTMENT_CANCELLED_BY_CUSTOMER'
+] as const
+export type NotificationType = (typeof NOTIFICATION_TYPES)[number]

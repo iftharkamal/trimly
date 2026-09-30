@@ -30,6 +30,16 @@ export default defineNuxtConfig({
     strict: true
   },
 
+  nitro: {
+    experimental: {
+      tasks: true
+    },
+    // "Getting close" also happens as time passes, not only when the queue changes.
+    scheduledTasks: {
+      '* * * * *': ['notifications:proximity']
+    }
+  },
+
   vite: {
     server: {
       // Let `pnpm tunnel` (ngrok) reach the dev server for testing on a phone.

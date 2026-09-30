@@ -455,6 +455,46 @@ Public: the code is the credential. `BookingDto`:
 **Errors:** 400 invalid code · 404 `APPOINTMENT_NOT_FOUND` · 409 `INVALID_TRANSITION` (cancel
 after it started, or not booked).
 
+## Notifications
+
+Business code emits **domain events** (`server/services/events`); it never knows about
+notification channels. The notification service (subscribed at startup in
+`server/plugins/notifications.ts`) turns each event into a message, stores it **once**
+(unique dedupe key) and hands it to every channel in `notifications/channels.ts`.
+
+| Event | Audience | Sent when |
+|---|---|---|
+| `QUEUE_GETTING_CLOSE` | the customer | their estimated wait is 15 min or less, once per place in the queue |
+| `CUSTOMER_JOINED_ONLINE` | the shop | someone joins the queue online |
+| `CUSTOMER_LEFT_QUEUE` | the shop | a customer leaves through their tracking link |
+| `APPOINTMENT_BOOKED_ONLINE` | the shop | a customer books online |
+| `APPOINTMENT_CANCELLED_BY_CUSTOMER` | the shop | a customer cancels through their booking link |
+
+"Getting close" is checked after every queue change and by a scheduled Nitro task every minute
+(waits shrink as time passes).
+
+**Channels.** Today: **browser**. Open pages pull their feed with their regular polling and show
+new items as a system notification (through `/sw.js`, when the tab is in the background), a toast,
+vibration and a beep. Nothing is delivered when the page is closed; add Push, WhatsApp, SMS or
+email as channels implementing `NotificationChannel.deliver()`.
+
+### `GET /api/dashboard/notifications?after=N` · `GET /api/track/:trackingCode/notifications?after=N`
+
+Shop feed (owner only) and one customer's feed (the tracking code is the credential).
+
+```json
+{ "data": {
+  "notifications": [{ "id": 42, "type": "CUSTOMER_JOINED_ONLINE", "title": "Arjun joined the queue", "body": "Haircut · #3 in line", "createdAt": "…" }],
+  "cursor": 42
+} }
+```
+
+- Without `after`: no items, just the current `cursor`, so a page starts from "now" instead of
+  replaying old notifications. Then pass the returned `cursor` as `after`.
+- Up to 50 per call, oldest first.
+
+**Errors:** 400 invalid `after` · 401/403 (shop feed) · 404 `ENTRY_NOT_FOUND` (customer feed).
+
 ## Tests
 
 `pnpm test:api` builds the app (into `.nuxt-test`, so it can run beside `pnpm dev`), starts it against the `_test` database and calls every

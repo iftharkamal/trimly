@@ -142,3 +142,18 @@ export interface QueueTrackingDto extends QueueEntryStatusDto {
     currency: string
   }
 }
+
+/** A notification for an open page to show (browser channel). */
+export interface NotificationDto {
+  id: number
+  type: string
+  title: string
+  body: string
+  createdAt: string
+}
+
+export interface NotificationFeedDto {
+  notifications: NotificationDto[]
+  /** Pass back as `after` to get only newer ones. */
+  cursor: number
+}

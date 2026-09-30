@@ -7,6 +7,26 @@ const trackingCode = computed(() => String(route.params.trackingCode))
 
 const { tracking, error, refresh, leaving, leave } = await useQueueTracking(trackingCode)
 
+// Alerts while waiting: "getting close" arrives through the notification feed.
+const { permission, ready: alertsReady, enable, alert } = useBrowserNotifications()
+const soundOn = ref(false)
+const isWaiting = computed(() =>
+  !!tracking.value && ['WAITING', 'GETTING_CLOSE', 'YOU_ARE_NEXT'].includes(tracking.value.state)
+)
+
+useNotificationFeed(
+  () => (isWaiting.value ? `/api/track/${trackingCode.value}/notifications` : null),
+  (notification) => {
+    alert({ title: notification.title, body: notification.body, url: route.fullPath, tag: notification.type })
+    refresh()
+  }
+)
+
+async function enableAlerts() {
+  await enable()
+  soundOn.value = true
+}
+
 if (import.meta.server && error.value?.statusCode === 404) {
   setResponseStatus(useRequestEvent()!, 404)
 }
@@ -94,6 +114,13 @@ async function onLeave() {
     </NuxtLink>
 
     <QueueStatusHero :tracking="tracking" />
+
+    <QueueAlerts
+      v-if="isWaiting && alertsReady"
+      :permission="permission"
+      :sound-on="soundOn"
+      @enable="enableAlerts"
+    />
 
     <UCard
       v-if="isActive"

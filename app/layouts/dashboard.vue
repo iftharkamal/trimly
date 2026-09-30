@@ -2,6 +2,32 @@
 const route = useRoute()
 const signingOut = ref(false)
 
+// Shop alerts on every dashboard page: online joins, bookings, cancellations.
+const { permission, ready: alertsReady, enable, alert } = useBrowserNotifications()
+
+function linkFor(type: string) {
+  return type.startsWith('APPOINTMENT_') ? '/dashboard/appointments' : '/dashboard'
+}
+
+useNotificationFeed('/api/dashboard/notifications', (notification) => {
+  alert({ title: notification.title, body: notification.body, url: linkFor(notification.type), tag: `shop-${notification.id}` })
+  // Show the change straight away instead of waiting for the next refresh.
+  refreshNuxtData()
+})
+
+const bell = computed(() => {
+  switch (permission.value) {
+    case 'granted':
+      return { icon: 'i-lucide-bell-ring', label: 'Alerts are on' }
+    case 'denied':
+      return { icon: 'i-lucide-bell-off', label: 'Alerts are blocked in your browser settings' }
+    case 'unsupported':
+      return { icon: 'i-lucide-bell', label: 'Alerts show on this page while it is open' }
+    default:
+      return { icon: 'i-lucide-bell', label: 'Turn on alerts' }
+  }
+})
+
 const links = [
   { label: 'Queue', to: '/dashboard', icon: 'i-lucide-list-ordered' },
   { label: 'Appointments', to: '/dashboard/appointments', icon: 'i-lucide-calendar' },
@@ -56,6 +82,16 @@ async function signOut() {
         </div>
 
         <div class="flex items-center gap-1">
+          <UButton
+            v-if="alertsReady"
+            :icon="bell.icon"
+            :aria-label="bell.label"
+            :title="bell.label"
+            color="neutral"
+            :variant="permission === 'default' ? 'soft' : 'ghost'"
+            size="sm"
+            @click="enable"
+          />
           <UColorModeButton size="sm" />
           <UButton
             icon="i-lucide-log-out"

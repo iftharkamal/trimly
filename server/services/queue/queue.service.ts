@@ -2,7 +2,7 @@
 // functions in queue-state.ts, and maps database constraints to domain errors.
 // ETAs are never stored; every read (and every mutation's result) recalculates them.
 import { and, asc, desc, eq, gte, inArray, isNotNull, lt, or, sql } from 'drizzle-orm'
-import type { QueueEntrySource, QueueEntryStatus, TrackingState } from '../../../shared/constants'
+import { GETTING_CLOSE_MINUTES, type QueueEntrySource, type QueueEntryStatus, type TrackingState } from '../../../shared/constants'
 import type { PaymentInput } from '../../../shared/schemas/payment'
 import { useDb, type Transaction } from '../../db'
 import { isUniqueViolation } from '../../db/errors'
@@ -19,6 +19,7 @@ import { getHoldsByBarber, type AppointmentHold } from '../appointment.service'
 import { findOrCreateCustomer } from '../customer.service'
 import { localDayRange, type TimeRange } from '../day-range'
 import { DomainError } from '../errors'
+import { emitDomainEvent } from '../events/bus'
 import { recordPayment } from '../payment.service'
 import {
   calculateJoinPreview,
@@ -66,6 +67,7 @@ export interface BarberQueue {
 
 export interface ShopQueue {
   shopId: string
+  shopName: string
   calculatedAt: Date
   barbers: BarberQueue[]
   /** The active barber a customer choosing "any barber" would get, if any. */
@@ -114,7 +116,7 @@ async function loadShopQueue(shopId: string, now: Date, barberId?: string): Prom
 
   const shop = await db.query.shops.findFirst({
     where: eq(shops.id, shopId),
-    columns: { serviceBufferMinutes: true }
+    columns: { name: true, serviceBufferMinutes: true }
   })
   if (!shop) {
     throw new DomainError('SHOP_NOT_FOUND', 404, 'Shop not found')
@@ -194,6 +196,7 @@ async function loadShopQueue(shopId: string, now: Date, barberId?: string): Prom
 
   return {
     shopId,
+    shopName: shop.name,
     calculatedAt: now,
     barbers: lanes,
     soonestBarberId: pickEarliestAvailableLane(lanes.filter(lane => lane.barber.isActive))?.barber.id ?? null
@@ -433,7 +436,20 @@ export async function addCustomer(input: AddCustomerInput): Promise<AddedQueueEn
     throw error
   }
 
-  return { trackingCode, entry: await getQueueEntryByTrackingCode(trackingCode) }
+  const entry = await getQueueEntryByTrackingCode(trackingCode)
+  if (input.source === 'ONLINE') {
+    await emitDomainEvent({
+      type: 'CUSTOMER_JOINED_ONLINE',
+      shopId: input.shopId,
+      entryId: entry.id,
+      customerName: input.customer.name,
+      serviceName: service.name,
+      position: entry.position
+    })
+  }
+  await checkQueueProximity(input.shopId)
+
+  return { trackingCode, entry }
 }
 
 /**
@@ -488,7 +504,9 @@ async function transitionEntry(
     throw new DomainError('INVALID_TRANSITION', 409, `Cannot change a ${existing.status} entry to ${to}`)
   }
 
-  return getActiveQueue(shopId)
+  const queue = await getActiveQueue(shopId)
+  await emitProximityEvents(queue)
+  return queue
 }
 
 /** WAITING → IN_PROGRESS. Any waiting customer can be started (e.g. if #1 is late). */
@@ -580,7 +598,15 @@ export async function leaveQueue(trackingCode: string): Promise<QueueTracking> {
     throw new DomainError('INVALID_TRANSITION', 409, 'You can only leave the queue while waiting')
   }
 
-  return getTracking(trackingCode)
+  const tracking = await getTracking(trackingCode)
+  await emitDomainEvent({
+    type: 'CUSTOMER_LEFT_QUEUE',
+    shopId: tracking.view.shopId,
+    entryId: tracking.view.id,
+    customerName: tracking.customerName
+  })
+  await checkQueueProximity(tracking.view.shopId)
+  return tracking
 }
 
 /** The customer's queue tracking code for an entry (null if it doesn't exist). */
@@ -590,4 +616,40 @@ export async function getTrackingCodeForEntry(entryId: string): Promise<string |
     columns: { trackingCode: true }
   })
   return entry?.trackingCode ?? null
+}
+
+/**
+ * "Getting close": announces every waiting customer whose estimated wait is
+ * within the threshold. Safe to call often: each customer is notified once
+ * (the notification service drops repeats).
+ */
+export async function emitProximityEvents(queue: ShopQueue): Promise<void> {
+  for (const lane of queue.barbers) {
+    for (const item of lane.state.waiting) {
+      if (item.waitMinutes <= GETTING_CLOSE_MINUTES) {
+        await emitDomainEvent({
+          type: 'QUEUE_GETTING_CLOSE',
+          shopId: queue.shopId,
+          shopName: queue.shopName,
+          entryId: item.entry.id,
+          position: item.position,
+          waitMinutes: item.waitMinutes
+        })
+      }
+    }
+  }
+}
+
+/** Recalculates a shop's queue and announces who is getting close. */
+export async function checkQueueProximity(shopId: string, now = new Date()): Promise<void> {
+  await emitProximityEvents(await getActiveQueue(shopId, now))
+}
+
+/** Shops with someone waiting (for the periodic "getting close" check). */
+export async function listShopIdsWithWaiting(): Promise<string[]> {
+  const rows = await useDb()
+    .selectDistinct({ shopId: queueEntries.shopId })
+    .from(queueEntries)
+    .where(eq(queueEntries.status, 'WAITING'))
+  return rows.map(row => row.shopId)
 }

@@ -846,3 +846,38 @@ describe('online booking: availability, booking and the booking link', () => {
     expectError(await request('GET', `/api/bookings/${randomUUID()}`), 404, 'APPOINTMENT_NOT_FOUND')
   })
 })
+
+describe('notification feeds', () => {
+  it('shop feed: starts from now, then shows new online joins (owner only)', async () => {
+    const start = await request('GET', '/api/dashboard/notifications', { cookie: owner.cookie })
+    expect(start.status).toBe(200)
+    expect(start.json.data.notifications).toEqual([])
+
+    await joinAsCustomer('Arjun', '+919990000600')
+
+    const next = await request('GET', `/api/dashboard/notifications?after=${start.json.data.cursor}`, { cookie: owner.cookie })
+    expect(next.json.data.notifications).toEqual([
+      expect.objectContaining({ type: 'CUSTOMER_JOINED_ONLINE', title: 'Arjun joined the queue' })
+    ])
+
+    expectError(await request('GET', '/api/dashboard/notifications'), 401, 'UNAUTHENTICATED')
+    expectError(await request('GET', '/api/dashboard/notifications', { cookie: outsider.cookie }), 403, 'FORBIDDEN')
+    expectError(await request('GET', '/api/dashboard/notifications?after=-1', { cookie: owner.cookie }), 400, 'VALIDATION_ERROR')
+  })
+
+  it('customer feed: only that customer’s "getting close" alert', async () => {
+    const first = (await joinAsCustomer('Arjun', '+919990000601')).json.data as JoinQueueResultDto
+    const second = (await joinAsCustomer('Nabil', '+919990000602')).json.data as JoinQueueResultDto
+
+    // Arjun starts now (close); Nabil is 25 minutes away.
+    const arjun = await request('GET', `/api/track/${first.trackingCode}/notifications?after=0`)
+    expect(arjun.status).toBe(200)
+    expect(arjun.json.data.notifications).toEqual([
+      expect.objectContaining({ type: 'QUEUE_GETTING_CLOSE', title: 'Getting close at Test Barber' })
+    ])
+    const nabil = await request('GET', `/api/track/${second.trackingCode}/notifications?after=0`)
+    expect(nabil.json.data.notifications).toEqual([])
+
+    expectError(await request('GET', `/api/track/${randomUUID()}/notifications`), 404, 'ENTRY_NOT_FOUND')
+  })
+})

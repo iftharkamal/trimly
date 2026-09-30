@@ -29,3 +29,8 @@ export type JoinQueueBody = z.infer<typeof joinQueueBodySchema>
 export const trackingCodeParamsSchema = z.object({
   trackingCode: z.uuid()
 })
+
+// Omit `after` on first load to start from "now" (no replay).
+export const notificationFeedQuerySchema = z.strictObject({
+  after: z.coerce.number().int().min(0).optional()
+})

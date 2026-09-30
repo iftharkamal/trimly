@@ -15,7 +15,8 @@ import { listActiveBarbers } from './barber.service'
 import { getActiveService } from './catalog.service'
 import type { CustomerInput } from './customer.service'
 import { DomainError } from './errors'
-import { getTrackingCodeForEntry } from './queue/queue.service'
+import { emitDomainEvent } from './events/bus'
+import { checkQueueProximity, getTrackingCodeForEntry } from './queue/queue.service'
 import { getOpeningHours, getServiceBufferMinutes, getShopProfile, type ShopProfile } from './shop.service'
 
 const MINUTE_MS = 60_000
@@ -105,7 +106,7 @@ export async function bookOnline(input: OnlineBookingInput, now = new Date()): P
     throw new DomainError('SLOT_UNAVAILABLE', 409, 'That time is no longer available. Please pick another.')
   }
 
-  return createAppointment({
+  const appointment = await createAppointment({
     shopId: input.shopId,
     barberId: input.barberId,
     candidateBarberIds: slot.barberIds,
@@ -114,6 +115,17 @@ export async function bookOnline(input: OnlineBookingInput, now = new Date()): P
     startsAt: input.startsAt,
     source: 'ONLINE'
   }, now)
+
+  await emitDomainEvent({
+    type: 'APPOINTMENT_BOOKED_ONLINE',
+    shopId: input.shopId,
+    appointmentId: appointment.id,
+    customerName: appointment.customer.name,
+    serviceName: appointment.serviceName,
+    startsAt: appointment.startsAt,
+    timeZone: availability.timeZone
+  })
+  return appointment
 }
 
 /** Everything the customer's booking page shows. */
@@ -143,5 +155,16 @@ export async function getBooking(trackingCode: string, now = new Date()): Promis
 }
 
 export async function cancelBooking(trackingCode: string, now = new Date()): Promise<Booking> {
-  return toBooking(await cancelByTrackingCode(trackingCode, now), now)
+  const booking = await toBooking(await cancelByTrackingCode(trackingCode, now), now)
+  await emitDomainEvent({
+    type: 'APPOINTMENT_CANCELLED_BY_CUSTOMER',
+    shopId: booking.appointment.shopId,
+    appointmentId: booking.appointment.id,
+    customerName: booking.appointment.customer.name,
+    startsAt: booking.appointment.startsAt,
+    timeZone: booking.shop.timezone
+  })
+  // The freed time may bring waiting customers closer.
+  await checkQueueProximity(booking.appointment.shopId)
+  return booking
 }

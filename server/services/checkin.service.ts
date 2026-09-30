@@ -4,7 +4,7 @@
 import { useDb } from '../db'
 import { lockBookedAppointment, markCheckedIn, getAppointment } from './appointment.service'
 import { DomainError } from './errors'
-import { getActiveQueue, insertCheckedInEntry, type ShopQueue } from './queue/queue.service'
+import { emitProximityEvents, getActiveQueue, insertCheckedInEntry, type ShopQueue } from './queue/queue.service'
 
 /** BOOKED appointment → queue entry. Returns the recalculated queue. */
 export async function checkInAppointment(shopId: string, appointmentId: string): Promise<ShopQueue> {
@@ -34,5 +34,7 @@ export async function checkInAppointment(shopId: string, appointmentId: string):
     throw new DomainError('INVALID_TRANSITION', 409, `Cannot check in a ${existing.status} appointment`)
   }
 
-  return getActiveQueue(shopId)
+  const queue = await getActiveQueue(shopId)
+  await emitProximityEvents(queue)
+  return queue
 }

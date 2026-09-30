@@ -35,3 +35,9 @@ export function greetingFor(date: Date, timeZone: string): string {
   }
   return hour < 17 ? 'Good afternoon' : 'Good evening'
 }
+
+/** "2:40 – 3:00 PM" in the shop's timezone. */
+export function formatTimeRange(startIso: string, endIso: string, timeZone: string): string {
+  return new Intl.DateTimeFormat('en', { hour: 'numeric', minute: '2-digit', timeZone })
+    .formatRange(new Date(startIso), new Date(endIso))
+}

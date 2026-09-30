@@ -194,3 +194,21 @@ export function pickEarliestAvailableLane<L extends { state: QueueState<unknown>
   }
   return best
 }
+
+export interface JoinPreview {
+  /** Position a customer joining now would get (1 = next). */
+  position: number
+  customersAhead: number
+  estimatedStart: Date
+  waitMinutes: number
+}
+
+/** What a customer joining this barber's queue right now could expect. */
+export function calculateJoinPreview(state: QueueState<unknown>, now: Date): JoinPreview {
+  return {
+    position: state.waiting.length + 1,
+    customersAhead: state.waiting.length + (state.current ? 1 : 0),
+    estimatedStart: state.nextAvailableAt,
+    waitMinutes: Math.max(0, Math.ceil(minutesBetween(now, state.nextAvailableAt)))
+  }
+}

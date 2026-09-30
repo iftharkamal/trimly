@@ -5,6 +5,7 @@ import {
   calculateCustomersAhead,
   calculateEstimatedEnd,
   calculateEstimatedStart,
+  calculateJoinPreview,
   calculateQueuePosition,
   calculateQueueState,
   pickEarliestAvailableLane,
@@ -230,5 +231,21 @@ describe('pickEarliestAvailableLane', () => {
   it('prefers the shorter queue on a tie', () => {
     const picked = pickEarliestAvailableLane([lane('a', at(10), 2), lane('b', at(10), 1)])
     expect(picked?.name).toBe('b')
+  })
+})
+
+describe('calculateJoinPreview', () => {
+  it('puts a new customer straight in the chair when the barber is idle', () => {
+    const state = calculateQueueState([], { now: NOW, bufferMinutes: 5 })
+    expect(calculateJoinPreview(state, NOW)).toEqual({ position: 1, customersAhead: 0, estimatedStart: NOW, waitMinutes: 0 })
+  })
+
+  it('places a new customer after everyone waiting and the customer in the chair', () => {
+    const state = calculateQueueState(
+      [entry('x', 'IN_PROGRESS', { startedAt: at(-5), durationMinutes: 20 }), entry('a', 'WAITING', { durationMinutes: 10 })],
+      { now: NOW, bufferMinutes: 5 }
+    )
+    // x ends +15, a +20..+30, new customer +35
+    expect(calculateJoinPreview(state, NOW)).toEqual({ position: 2, customersAhead: 2, estimatedStart: at(35), waitMinutes: 35 })
   })
 })

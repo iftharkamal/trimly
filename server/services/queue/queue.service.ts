@@ -2,7 +2,7 @@
 // functions in queue-state.ts, and maps database constraints to domain errors.
 // ETAs are never stored; every read (and every mutation's result) recalculates them.
 import { and, asc, desc, eq, gte, inArray, isNotNull, lt, or, sql } from 'drizzle-orm'
-import type { QueueEntrySource, QueueEntryStatus } from '../../../shared/constants'
+import type { QueueEntrySource, QueueEntryStatus, TrackingState } from '../../../shared/constants'
 import { useDb, type Transaction } from '../../db'
 import { isUniqueViolation } from '../../db/errors'
 import {
@@ -15,7 +15,14 @@ import {
   shops
 } from '../../db/schema'
 import { DomainError } from '../errors'
-import { calculateQueueState, pickEarliestAvailableLane, type QueueState } from './queue-state'
+import {
+  calculateJoinPreview,
+  calculateQueueState,
+  pickEarliestAvailableLane,
+  type JoinPreview,
+  type QueueState
+} from './queue-state'
+import { getTrackingState } from './tracking'
 import { statusesThatCanTransitionTo } from './transitions'
 
 const ACTIVE_STATUSES: QueueEntryStatus[] = ['WAITING', 'IN_PROGRESS']
@@ -44,12 +51,16 @@ export interface BarberQueue {
     isActive: boolean
   }
   state: QueueState<ActiveQueueEntry>
+  /** What a customer joining this barber now could expect. */
+  joinPreview: JoinPreview
 }
 
 export interface ShopQueue {
   shopId: string
   calculatedAt: Date
   barbers: BarberQueue[]
+  /** The active barber a customer choosing "any barber" would get, if any. */
+  soonestBarberId: string | null
 }
 
 /** A single entry as its customer sees it. Estimates are null once the entry is finished. */
@@ -154,20 +165,23 @@ async function loadShopQueue(shopId: string, now: Date, barberId?: string): Prom
 
   const lastEndByBarber = new Map(recentEnds.map(row => [row.barberId, row.endedAt]))
 
+  const lanes = shopBarbers
+    // A deactivated barber still shows while customers remain in their queue.
+    .filter(barber => barber.isActive || entriesByBarber.has(barber.id))
+    .map((barber) => {
+      const state = calculateQueueState(entriesByBarber.get(barber.id) ?? [], {
+        now,
+        bufferMinutes: shop.serviceBufferMinutes,
+        lastServiceEndedAt: lastEndByBarber.get(barber.id) ?? null
+      })
+      return { barber, state, joinPreview: calculateJoinPreview(state, now) }
+    })
+
   return {
     shopId,
     calculatedAt: now,
-    barbers: shopBarbers
-      // A deactivated barber still shows while customers remain in their queue.
-      .filter(barber => barber.isActive || entriesByBarber.has(barber.id))
-      .map(barber => ({
-        barber,
-        state: calculateQueueState(entriesByBarber.get(barber.id) ?? [], {
-          now,
-          bufferMinutes: shop.serviceBufferMinutes,
-          lastServiceEndedAt: lastEndByBarber.get(barber.id) ?? null
-        })
-      }))
+    barbers: lanes,
+    soonestBarberId: pickEarliestAvailableLane(lanes.filter(lane => lane.barber.isActive))?.barber.id ?? null
   }
 }
 
@@ -317,12 +331,11 @@ async function resolveBarberId(shopId: string, barberId: string | null | undefin
     return barber.id
   }
 
-  const { barbers: lanes } = await loadShopQueue(shopId, now)
-  const best = pickEarliestAvailableLane(lanes.filter(lane => lane.barber.isActive))
-  if (!best) {
+  const { soonestBarberId } = await loadShopQueue(shopId, now)
+  if (!soonestBarberId) {
     throw new DomainError('NO_BARBER_AVAILABLE', 409, 'No barber is available')
   }
-  return best.barber.id
+  return soonestBarberId
 }
 
 /** Adds a customer to a barber's queue (online join or walk-in). */
@@ -334,9 +347,13 @@ export async function addCustomer(input: AddCustomerInput): Promise<AddedQueueEn
     throw new DomainError('PHONE_REQUIRED', 400, 'A phone number is required to join the queue')
   }
 
-  const shop = await db.query.shops.findFirst({ where: eq(shops.id, input.shopId), columns: { id: true } })
+  const shop = await db.query.shops.findFirst({ where: eq(shops.id, input.shopId), columns: { isOpen: true } })
   if (!shop) {
     throw new DomainError('SHOP_NOT_FOUND', 404, 'Shop not found')
+  }
+  // Closing only stops online joins; the barber can still add walk-ins.
+  if (input.source === 'ONLINE' && !shop.isOpen) {
+    throw new DomainError('SHOP_CLOSED', 409, 'The shop is not taking online customers right now')
   }
 
   const service = await db.query.services.findFirst({
@@ -443,4 +460,73 @@ export function cancelEntry(shopId: string, entryId: string): Promise<ShopQueue>
 /** WAITING → NO_SHOW. */
 export function markNoShow(shopId: string, entryId: string): Promise<ShopQueue> {
   return transitionEntry(shopId, entryId, 'NO_SHOW')
+}
+
+/** Everything the customer's status page shows for one entry. */
+export interface QueueTracking {
+  view: QueueEntryView
+  state: TrackingState
+  customerName: string
+  priceMinor: number
+  barberName: string
+  shop: {
+    name: string
+    slug: string
+    timezone: string
+    currency: string
+  }
+}
+
+/** The customer's live status page data, by tracking code. */
+export async function getTracking(trackingCode: string, now = new Date()): Promise<QueueTracking> {
+  const view = await getQueueEntryByTrackingCode(trackingCode, now)
+
+  const details = await useDb().query.queueEntries.findFirst({
+    where: eq(queueEntries.id, view.id),
+    columns: { priceMinor: true },
+    with: {
+      shop: { columns: { name: true, slug: true, timezone: true, currency: true } },
+      barber: { columns: { name: true } },
+      customer: { columns: { name: true } }
+    }
+  })
+  if (!details) {
+    throw new DomainError('ENTRY_NOT_FOUND', 404, 'Queue entry not found')
+  }
+
+  return {
+    view,
+    state: getTrackingState(view),
+    customerName: details.customer.name,
+    priceMinor: details.priceMinor,
+    barberName: details.barber.name,
+    shop: details.shop
+  }
+}
+
+/**
+ * The customer leaves the queue themselves. Only while WAITING: once in the
+ * chair, only the barber can change the entry.
+ */
+export async function leaveQueue(trackingCode: string): Promise<QueueTracking> {
+  const db = useDb()
+
+  const updated = await db
+    .update(queueEntries)
+    .set({ status: 'CANCELLED', endedAt: sql`now()` })
+    .where(and(eq(queueEntries.trackingCode, trackingCode), eq(queueEntries.status, 'WAITING')))
+    .returning({ id: queueEntries.id })
+
+  if (updated.length === 0) {
+    const existing = await db.query.queueEntries.findFirst({
+      where: eq(queueEntries.trackingCode, trackingCode),
+      columns: { status: true }
+    })
+    if (!existing) {
+      throw new DomainError('ENTRY_NOT_FOUND', 404, 'Queue entry not found')
+    }
+    throw new DomainError('INVALID_TRANSITION', 409, 'You can only leave the queue while waiting')
+  }
+
+  return getTracking(trackingCode)
 }

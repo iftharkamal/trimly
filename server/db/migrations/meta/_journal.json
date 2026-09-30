@@ -15,6 +15,13 @@
       "when": 1790755457026,
       "tag": "0001_queue_buffer_and_optional_phone",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1790765218438,
+      "tag": "0002_shop_open_toggle",
+      "breakpoints": true
     }
   ]
 }

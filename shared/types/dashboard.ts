@@ -1,14 +1,8 @@
 // Response shapes for the barber dashboard and the service catalog.
+import type { ShopProfileDto } from './shop'
 
 export interface DashboardDto {
-  shop: {
-    id: string
-    name: string
-    slug: string
-    /** IANA timezone; format times in it so every device shows shop time. */
-    timezone: string
-    currency: string
-  }
+  shop: ShopProfileDto
   owner: {
     name: string
   }

@@ -5,7 +5,8 @@ import { beforeAll, beforeEach, describe, expect, inject, it } from 'vitest'
 import type {
   JoinQueueResultDto,
   OwnerShopQueueDto,
-  PublicShopQueueDto
+  PublicShopQueueDto,
+  QueueTrackingDto
 } from '../../../shared/types/queue'
 import { useDb } from '../../db'
 import { queueEntries } from '../../db/schema'
@@ -20,7 +21,7 @@ interface ApiResponse {
 }
 
 async function request(
-  method: 'GET' | 'POST',
+  method: 'GET' | 'POST' | 'PATCH',
   path: string,
   options: { body?: unknown, rawBody?: string, cookie?: string } = {}
 ): Promise<ApiResponse> {
@@ -338,7 +339,7 @@ describe('GET /api/dashboard', () => {
 
     expect(response.status).toBe(200)
     expect(response.json.data).toEqual({
-      shop: { id: shop.shopId, name: 'Test Barber', slug: 'test-barber', timezone: 'Asia/Kolkata', currency: 'INR' },
+      shop: { id: shop.shopId, name: 'Test Barber', slug: 'test-barber', timezone: 'Asia/Kolkata', currency: 'INR', isOpen: true },
       owner: { name: 'Test User' },
       today: { customers: 2, servicesCompleted: 1, completedRevenueMinor: 15000 }
     })
@@ -365,5 +366,148 @@ describe('GET /api/shops/:shopId/services', () => {
   it('validates the shop id (400) and rejects an unknown shop (404)', async () => {
     expectError(await request('GET', '/api/shops/not-a-uuid/services'), 400, 'VALIDATION_ERROR')
     expectError(await request('GET', `/api/shops/${randomUUID()}/services`), 404, 'SHOP_NOT_FOUND')
+  })
+})
+
+describe('GET /api/shops/by-slug/:slug', () => {
+  it('returns the public shop profile', async () => {
+    const response = await request('GET', '/api/shops/by-slug/test-barber')
+
+    expect(response.status).toBe(200)
+    expect(response.json.data).toEqual({
+      id: shop.shopId,
+      name: 'Test Barber',
+      slug: 'test-barber',
+      timezone: 'Asia/Kolkata',
+      currency: 'INR',
+      isOpen: true
+    })
+  })
+
+  it('rejects a malformed slug (400) and an unknown one (404)', async () => {
+    expectError(await request('GET', '/api/shops/by-slug/Not_Valid'), 400, 'VALIDATION_ERROR')
+    expectError(await request('GET', '/api/shops/by-slug/no-such-shop'), 404, 'SHOP_NOT_FOUND')
+  })
+})
+
+describe('queue join preview', () => {
+  it('tells a customer where they would be before joining', async () => {
+    await joinAsCustomer('Arjun', '+919990000001') // haircut, 20 min
+
+    const queue = (await request('GET', `/api/shops/${shop.shopId}/queue`)).json.data as PublicShopQueueDto
+
+    expect(queue.soonestBarberId).toBe(shop.barberId)
+    // Arjun 0–20, then the buffer: a new customer would be #2, starting in 25 minutes.
+    expect(queue.barbers[0]!.joinPreview).toMatchObject({ position: 2, customersAhead: 1, waitMinutes: 25 })
+  })
+})
+
+describe('PATCH /api/dashboard/shop', () => {
+  /** `cookie: null` sends the request signed out. */
+  function setOpen(isOpen: unknown, cookie: string | null = owner.cookie, extra: object = {}) {
+    return request('PATCH', '/api/dashboard/shop', { body: { isOpen, ...extra }, cookie: cookie ?? undefined })
+  }
+
+  it('closes the shop to online joins but still allows walk-ins', async () => {
+    const closed = await setOpen(false)
+    expect(closed.status).toBe(200)
+    expect(closed.json.data.isOpen).toBe(false)
+    expect((await request('GET', '/api/shops/by-slug/test-barber')).json.data.isOpen).toBe(false)
+
+    expectError(await joinAsCustomer('Arjun', '+919990000001'), 409, 'SHOP_CLOSED')
+    expect((await walkIn('Walk-in')).status).toBe(201)
+
+    expect((await setOpen(true)).json.data.isOpen).toBe(true)
+    expect((await joinAsCustomer('Arjun', '+919990000001')).status).toBe(201)
+  })
+
+  it('requires the owner and a strict boolean body', async () => {
+    expectError(await setOpen(false, null), 401, 'UNAUTHENTICATED')
+    expectError(await setOpen(false, outsider.cookie), 403, 'FORBIDDEN')
+    expectError(await setOpen('no'), 400, 'VALIDATION_ERROR')
+    expectError(await setOpen(false, owner.cookie, { name: 'Renamed' }), 400, 'VALIDATION_ERROR')
+  })
+})
+
+describe('GET /api/track/:trackingCode and POST /api/track/:trackingCode/cancel', () => {
+  async function joinForCode(name: string, phone: string, serviceId = shop.services.haircut) {
+    return ((await joinAsCustomer(name, phone, serviceId)).json.data as JoinQueueResultDto).trackingCode
+  }
+
+  function track(code: string) {
+    return request('GET', `/api/track/${code}`)
+  }
+
+  it('shows the customer their place with a server-decided state', async () => {
+    await joinForCode('Arjun', '+919990000001') // haircut 20
+    await joinForCode('Nabil', '+919990000002', shop.services.beard) // beard 10
+    const code = await joinForCode('Rahul', '+919990000003') // haircut 20
+
+    const response = await track(code)
+    const tracking = response.json.data as QueueTrackingDto
+
+    expect(response.status).toBe(200)
+    // Arjun 0–20, Nabil 25–35, Rahul 40–60: 40 minutes away, so still WAITING.
+    expect(tracking).toMatchObject({
+      state: 'WAITING',
+      status: 'WAITING',
+      position: 3,
+      customersAhead: 2,
+      waitMinutes: 40,
+      customerName: 'Rahul',
+      serviceName: 'Haircut',
+      priceMinor: 15000,
+      barberName: 'Faisal',
+      shop: { name: 'Test Barber', slug: 'test-barber', timezone: 'Asia/Kolkata', currency: 'INR' }
+    })
+    expect(new Date(tracking.estimatedEnd!).getTime() - new Date(tracking.estimatedStart!).getTime())
+      .toBe(20 * 60_000)
+    // Never exposes other customers.
+    expect(JSON.stringify(response.json)).not.toContain('Arjun')
+  })
+
+  it('moves through GETTING_CLOSE, YOU_ARE_NEXT, IN_PROGRESS and COMPLETED', async () => {
+    const first = (await joinAsCustomer('Arjun', '+919990000001', shop.services.beard)).json.data as JoinQueueResultDto
+    const code = await joinForCode('Nabil', '+919990000002')
+
+    // Arjun's beard (10) plus the buffer (5): Nabil starts in 15 minutes.
+    expect((await track(code)).json.data).toMatchObject({ state: 'GETTING_CLOSE', position: 2 })
+
+    await act('start', first.entry.id)
+    expect((await track(code)).json.data).toMatchObject({ state: 'YOU_ARE_NEXT', position: 1, customersAhead: 1 })
+
+    await act('complete', first.entry.id)
+    const nabilId = (await track(code)).json.data.id as string
+    await act('start', nabilId)
+    expect((await track(code)).json.data).toMatchObject({ state: 'IN_PROGRESS', position: null })
+
+    await act('complete', nabilId)
+    expect((await track(code)).json.data).toMatchObject({ state: 'COMPLETED', estimatedStart: null })
+  })
+
+  it('shows a no-show as CANCELLED, keeping the real status', async () => {
+    const code = await joinForCode('Arjun', '+919990000001')
+    await act('no-show', (await track(code)).json.data.id)
+
+    expect((await track(code)).json.data).toMatchObject({ state: 'CANCELLED', status: 'NO_SHOW' })
+  })
+
+  it('lets the customer leave while waiting, and only then', async () => {
+    const code = await joinForCode('Arjun', '+919990000001')
+
+    const left = await request('POST', `/api/track/${code}/cancel`)
+    expect(left.status).toBe(200)
+    expect(left.json.data).toMatchObject({ state: 'CANCELLED', status: 'CANCELLED' })
+    expectError(await request('POST', `/api/track/${code}/cancel`), 409, 'INVALID_TRANSITION')
+
+    const inChair = await joinForCode('Nabil', '+919990000002')
+    await act('start', (await track(inChair)).json.data.id)
+    expectError(await request('POST', `/api/track/${inChair}/cancel`), 409, 'INVALID_TRANSITION')
+  })
+
+  it('validates the code (400) and hides unknown codes (404)', async () => {
+    expectError(await track('not-a-code'), 400, 'VALIDATION_ERROR')
+    expectError(await track(randomUUID()), 404, 'ENTRY_NOT_FOUND')
+    expectError(await request('POST', `/api/track/${randomUUID()}/cancel`), 404, 'ENTRY_NOT_FOUND')
   })
 })

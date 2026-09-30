@@ -1,4 +1,4 @@
-# Trimly API — Queue
+# Trimly API
 
 All positions, customers-ahead counts and ETAs are calculated by the server on
 every request. Clients never send them; request bodies that include them are rejected.
@@ -38,7 +38,7 @@ request schemas are in [`shared/schemas/queue.ts`](../shared/schemas/queue.ts).
 | 401 | `UNAUTHENTICATED` — no valid session |
 | 403 | `FORBIDDEN` — signed in, but the account doesn't manage a shop |
 | 404 | `SHOP_NOT_FOUND`, `SERVICE_NOT_FOUND`, `BARBER_NOT_FOUND`, `ENTRY_NOT_FOUND` |
-| 409 | `ALREADY_IN_QUEUE`, `BARBER_BUSY`, `INVALID_TRANSITION`, `NO_BARBER_AVAILABLE` |
+| 409 | `ALREADY_IN_QUEUE`, `BARBER_BUSY`, `INVALID_TRANSITION`, `NO_BARBER_AVAILABLE`, `SHOP_CLOSED` |
 | 500 | `INTERNAL_ERROR` |
 
 ## `GET /api/shops/:shopId/queue`
@@ -81,12 +81,20 @@ The live queue for every barber in the shop.
             "waitMinutes": 20
           }
         ],
-        "nextAvailableAt": "2026-09-30T10:35:00.000Z"
+        "nextAvailableAt": "2026-09-30T10:35:00.000Z",
+        "joinPreview": {
+          "position": 2, "customersAhead": 2,
+          "estimatedStart": "2026-09-30T10:35:00.000Z", "waitMinutes": 35
+        }
       }
-    ]
+    ],
+    "soonestBarberId": "a1f2…"
   }
 }
 ```
+
+- `joinPreview` is what a customer joining that barber **now** could expect (shown before they join).
+- `soonestBarberId` is the barber an "any barber" join would be assigned to (`null` if no barber is active).
 
 **200 (public view):** same structure with `"view": "public"`, and each `entry` is only
 `{ "serviceName": "Haircut", "durationMinutes": 20 }`.
@@ -135,7 +143,8 @@ Add a customer to the queue.
 
 **Errors:** 400 `VALIDATION_ERROR` / `BAD_REQUEST` / `PHONE_REQUIRED` · 404 `SHOP_NOT_FOUND` /
 `SERVICE_NOT_FOUND` / `BARBER_NOT_FOUND` · 409 `ALREADY_IN_QUEUE` (this phone already has an
-active place in this shop) / `NO_BARBER_AVAILABLE`.
+active place in this shop) / `NO_BARBER_AVAILABLE` / `SHOP_CLOSED` (online joins only; walk-ins
+are still allowed while the shop is closed).
 
 ## Queue actions
 
@@ -153,6 +162,110 @@ active place in this shop) / `NO_BARBER_AVAILABLE`.
 **Errors:** 400 invalid `id` · 401 `UNAUTHENTICATED` · 403 `FORBIDDEN` · 404 `ENTRY_NOT_FOUND` ·
 409 `INVALID_TRANSITION` (the entry's current status doesn't allow it, including repeated taps) ·
 409 `BARBER_BUSY` (start only: the barber already has a customer in progress).
+
+## Customer tracking
+
+The tracking code returned when joining is the credential: whoever has the link can see
+that one entry and leave the queue. No account is needed.
+
+### `GET /api/track/:trackingCode`
+
+- **Auth:** none. **Params:** `trackingCode` — UUID.
+- **200:** the entry's live status plus what the status page shows. Never includes other customers.
+
+```json
+{
+  "data": {
+    "id": "e3…", "shopId": "5b0c…", "barberId": "a1f2…",
+    "status": "WAITING", "state": "GETTING_CLOSE",
+    "serviceName": "Haircut", "durationMinutes": 20, "priceMinor": 15000,
+    "customerName": "Arjun", "barberName": "Faisal",
+    "joinedAt": "2026-09-30T10:00:00.000Z", "startedAt": null, "endedAt": null,
+    "position": 2, "customersAhead": 1, "waitMinutes": 15,
+    "estimatedStart": "2026-09-30T10:15:00.000Z", "estimatedEnd": "2026-09-30T10:35:00.000Z",
+    "calculatedAt": "2026-09-30T10:00:00.000Z",
+    "shop": { "name": "Faisal Barber", "slug": "faisal-barber", "timezone": "Asia/Kolkata", "currency": "INR" }
+  }
+}
+```
+
+`state` is decided by the server:
+
+| `state` | When |
+|---|---|
+| `YOU_ARE_NEXT` | Waiting at position 1 (even if someone is still in the chair) |
+| `GETTING_CLOSE` | Waiting, estimated wait ≤ 15 minutes |
+| `WAITING` | Waiting, longer than that |
+| `IN_PROGRESS` | In the chair |
+| `COMPLETED` | Service completed |
+| `CANCELLED` | Cancelled, or marked no-show (`status` tells them apart) |
+
+Position and estimates are `null` once the customer is no longer waiting.
+
+**Errors:** 400 invalid code · 404 `ENTRY_NOT_FOUND`.
+
+### `POST /api/track/:trackingCode/cancel`
+
+The customer leaves the queue. Only while `WAITING`; once in the chair, only the barber can
+change the entry.
+
+- **Auth:** none. **Body:** none.
+- **200:** the updated tracking status (`state: "CANCELLED"`).
+
+**Errors:** 400 invalid code · 404 `ENTRY_NOT_FOUND` · 409 `INVALID_TRANSITION`.
+
+## Shops and services
+
+### `GET /api/shops/by-slug/:slug`
+
+The shop behind a `/shop/:slug` link.
+
+- **Auth:** none. **Params:** `slug` — lowercase letters, digits and dashes.
+- **200:** `{ "data": { "id", "name", "slug", "timezone", "currency", "isOpen" } }` —
+  `isOpen` is whether the shop is taking online customers.
+
+**Errors:** 400 invalid slug · 404 `SHOP_NOT_FOUND`.
+
+### `GET /api/shops/:shopId/services`
+
+- **Auth:** none. **Params:** `shopId` — UUID.
+- **200:** active services, cheapest first:
+  `{ "data": [{ "id", "name", "durationMinutes", "priceMinor" }] }`.
+
+**Errors:** 400 invalid `shopId` · 404 `SHOP_NOT_FOUND`.
+
+## Barber dashboard
+
+### `GET /api/dashboard`
+
+- **Auth:** owner only.
+- **200:**
+
+```json
+{
+  "data": {
+    "shop": { "id": "5b0c…", "name": "Faisal Barber", "slug": "faisal-barber", "timezone": "Asia/Kolkata", "currency": "INR", "isOpen": true },
+    "owner": { "name": "Faisal" },
+    "today": { "customers": 4, "servicesCompleted": 1, "completedRevenueMinor": 15000 }
+  }
+}
+```
+
+"Today" is the current calendar day in the shop's timezone. `customers` counts people who
+joined today and weren't cancelled or marked no-show. `completedRevenueMinor` is the total
+price of services completed today — it stands in for revenue until payments exist.
+
+**Errors:** 401 `UNAUTHENTICATED` · 403 `FORBIDDEN`.
+
+### `PATCH /api/dashboard/shop`
+
+Open or close the shop to online joins. Walk-ins can always be added.
+
+- **Auth:** owner only.
+- **Body** (strict): `{ "isOpen": boolean }`.
+- **200:** the updated shop profile (same shape as `GET /api/shops/by-slug/:slug`).
+
+**Errors:** 400 `VALIDATION_ERROR` · 401 `UNAUTHENTICATED` · 403 `FORBIDDEN`.
 
 ## Tests
 

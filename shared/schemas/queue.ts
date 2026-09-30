@@ -2,7 +2,7 @@
 import { z } from 'zod'
 
 // Accepts common separators ("+91 98765-43210") and stores E.164 ("+919876543210").
-const phoneSchema = z
+export const phoneSchema = z
   .string()
   .transform(value => value.replace(/[\s\-().]/g, ''))
   .pipe(z.string().regex(/^\+[1-9]\d{7,14}$/, 'Enter the phone number with country code, e.g. +91 98765 43210'))
@@ -25,3 +25,7 @@ export const joinQueueBodySchema = z.strictObject({
 })
 
 export type JoinQueueBody = z.infer<typeof joinQueueBodySchema>
+
+export const trackingCodeParamsSchema = z.object({
+  trackingCode: z.uuid()
+})

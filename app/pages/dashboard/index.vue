@@ -9,7 +9,9 @@ const {
   dashboard,
   status: dashboardStatus,
   error: dashboardError,
-  refresh: refreshDashboard
+  refresh: refreshDashboard,
+  updatingOpen,
+  setOpen
 } = await useDashboard()
 
 const shopId = computed(() => dashboard.value?.shop.id)
@@ -153,14 +155,35 @@ async function onConfirm() {
           <USkeleton class="h-8 w-64" />
         </div>
 
-        <UButton
-          label="Add Customer"
-          icon="i-lucide-plus"
-          color="neutral"
-          size="lg"
-          :disabled="!queue"
-          @click="addOpen = true"
-        />
+        <div class="flex flex-wrap items-center gap-3">
+          <USwitch
+            v-if="dashboard"
+            :model-value="dashboard.shop.isOpen"
+            :loading="updatingOpen"
+            :disabled="updatingOpen"
+            :label="dashboard.shop.isOpen ? 'Open' : 'Closed'"
+            description="Online joining"
+            @update:model-value="value => setOpen(value)"
+          />
+          <UButton
+            v-if="dashboard"
+            :to="`/shop/${dashboard.shop.slug}`"
+            target="_blank"
+            label="Customer page"
+            icon="i-lucide-external-link"
+            color="neutral"
+            variant="ghost"
+            size="lg"
+          />
+          <UButton
+            label="Add Customer"
+            icon="i-lucide-plus"
+            color="neutral"
+            size="lg"
+            :disabled="!queue"
+            @click="addOpen = true"
+          />
+        </div>
       </header>
 
       <!-- Summary -->

@@ -1,6 +1,6 @@
 // Response shapes of the queue API (dates are ISO 8601 strings).
 // All positions and estimates are calculated by the server.
-import type { QueueEntrySource, QueueEntryStatus } from '../constants'
+import type { QueueEntrySource, QueueEntryStatus, TrackingState } from '../constants'
 
 export interface ApiSuccess<T> {
   data: T
@@ -53,6 +53,14 @@ export interface WaitingEntryDto<E> {
   waitMinutes: number
 }
 
+/** What a customer joining a barber's queue right now could expect. */
+export interface JoinPreviewDto {
+  position: number
+  customersAhead: number
+  estimatedStart: string
+  waitMinutes: number
+}
+
 export interface BarberQueueDto<E> {
   barber: {
     id: string
@@ -63,6 +71,7 @@ export interface BarberQueueDto<E> {
   waiting: WaitingEntryDto<E>[]
   /** When a customer joining this barber now would be expected to start. */
   nextAvailableAt: string
+  joinPreview: JoinPreviewDto
 }
 
 export interface OwnerShopQueueDto {
@@ -70,6 +79,8 @@ export interface OwnerShopQueueDto {
   shopId: string
   calculatedAt: string
   barbers: BarberQueueDto<QueueEntryDto>[]
+  /** The barber an "any barber" join would go to; null if none is active. */
+  soonestBarberId: string | null
 }
 
 export interface PublicShopQueueDto {
@@ -77,6 +88,8 @@ export interface PublicShopQueueDto {
   shopId: string
   calculatedAt: string
   barbers: BarberQueueDto<PublicQueueEntryDto>[]
+  /** The barber an "any barber" join would go to; null if none is active. */
+  soonestBarberId: string | null
 }
 
 export type ShopQueueDto = OwnerShopQueueDto | PublicShopQueueDto
@@ -104,4 +117,18 @@ export interface JoinQueueResultDto {
   /** Secret for the customer's tracking link. Only returned here. */
   trackingCode: string
   entry: QueueEntryStatusDto
+}
+
+/** The customer's status page. `state` decides the visual treatment. */
+export interface QueueTrackingDto extends QueueEntryStatusDto {
+  state: TrackingState
+  customerName: string
+  priceMinor: number
+  barberName: string
+  shop: {
+    name: string
+    slug: string
+    timezone: string
+    currency: string
+  }
 }

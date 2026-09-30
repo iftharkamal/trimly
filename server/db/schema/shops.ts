@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm'
-import { char, check, integer, pgTable, text, uuid } from 'drizzle-orm/pg-core'
+import { boolean, char, check, integer, pgTable, text, uuid } from 'drizzle-orm/pg-core'
 import { user } from './auth'
 import { timestamps } from './columns'
 
@@ -23,6 +23,8 @@ export const shops = pgTable(
     currency: char('currency', { length: 3 }).notNull(),
     // Gap between one service ending and the next starting (cleanup, payment), used in ETAs.
     serviceBufferMinutes: integer('service_buffer_minutes').notNull().default(5),
+    // Set by the barber. When closed, online joins are blocked; walk-ins can still be added.
+    isOpen: boolean('is_open').notNull().default(true),
     ...timestamps
   },
   table => [check('shops_service_buffer_non_negative', sql`${table.serviceBufferMinutes} >= 0`)]

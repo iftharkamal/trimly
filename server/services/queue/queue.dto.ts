@@ -6,9 +6,10 @@ import type {
   PublicQueueEntryDto,
   PublicShopQueueDto,
   QueueEntryDto,
-  QueueEntryStatusDto
+  QueueEntryStatusDto,
+  QueueTrackingDto
 } from '../../../shared/types/queue'
-import type { ActiveQueueEntry, BarberQueue, QueueEntryView, ShopQueue } from './queue.service'
+import type { ActiveQueueEntry, BarberQueue, QueueEntryView, QueueTracking, ShopQueue } from './queue.service'
 
 function isoOrNull(date: Date | null): string | null {
   return date ? date.toISOString() : null
@@ -16,6 +17,7 @@ function isoOrNull(date: Date | null): string | null {
 
 function toBarberQueueDto<E>(lane: BarberQueue, mapEntry: (entry: ActiveQueueEntry) => E): BarberQueueDto<E> {
   const { current, waiting, nextAvailableAt } = lane.state
+  const { joinPreview } = lane
   return {
     barber: { id: lane.barber.id, name: lane.barber.name, isActive: lane.barber.isActive },
     current: current
@@ -34,7 +36,13 @@ function toBarberQueueDto<E>(lane: BarberQueue, mapEntry: (entry: ActiveQueueEnt
       estimatedEnd: item.estimatedEnd.toISOString(),
       waitMinutes: item.waitMinutes
     })),
-    nextAvailableAt: nextAvailableAt.toISOString()
+    nextAvailableAt: nextAvailableAt.toISOString(),
+    joinPreview: {
+      position: joinPreview.position,
+      customersAhead: joinPreview.customersAhead,
+      estimatedStart: joinPreview.estimatedStart.toISOString(),
+      waitMinutes: joinPreview.waitMinutes
+    }
   }
 }
 
@@ -61,7 +69,8 @@ export function toOwnerQueueDto(queue: ShopQueue): OwnerShopQueueDto {
     view: 'owner',
     shopId: queue.shopId,
     calculatedAt: queue.calculatedAt.toISOString(),
-    barbers: queue.barbers.map(lane => toBarberQueueDto(lane, toQueueEntryDto))
+    barbers: queue.barbers.map(lane => toBarberQueueDto(lane, toQueueEntryDto)),
+    soonestBarberId: queue.soonestBarberId
   }
 }
 
@@ -70,7 +79,8 @@ export function toPublicQueueDto(queue: ShopQueue): PublicShopQueueDto {
     view: 'public',
     shopId: queue.shopId,
     calculatedAt: queue.calculatedAt.toISOString(),
-    barbers: queue.barbers.map(lane => toBarberQueueDto(lane, toPublicQueueEntryDto))
+    barbers: queue.barbers.map(lane => toBarberQueueDto(lane, toPublicQueueEntryDto)),
+    soonestBarberId: queue.soonestBarberId
   }
 }
 
@@ -91,5 +101,16 @@ export function toQueueEntryStatusDto(view: QueueEntryView): QueueEntryStatusDto
     estimatedEnd: isoOrNull(view.estimatedEnd),
     waitMinutes: view.waitMinutes,
     calculatedAt: view.calculatedAt.toISOString()
+  }
+}
+
+export function toQueueTrackingDto(tracking: QueueTracking): QueueTrackingDto {
+  return {
+    ...toQueueEntryStatusDto(tracking.view),
+    state: tracking.state,
+    customerName: tracking.customerName,
+    priceMinor: tracking.priceMinor,
+    barberName: tracking.barberName,
+    shop: { ...tracking.shop }
   }
 }

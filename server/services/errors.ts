@@ -5,6 +5,7 @@ export type DomainErrorCode =
   | 'NO_BARBER_AVAILABLE'
   | 'ENTRY_NOT_FOUND'
   | 'PHONE_REQUIRED'
+  | 'SHOP_CLOSED'
   | 'ALREADY_IN_QUEUE'
   | 'BARBER_BUSY'
   | 'INVALID_TRANSITION'

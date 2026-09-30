@@ -6,5 +6,11 @@
     <p class="mt-2 text-muted">
       Barber shop queue management.
     </p>
+    <UButton
+      to="/dashboard"
+      label="Barber dashboard"
+      trailing-icon="i-lucide-arrow-right"
+      class="mt-6"
+    />
   </UContainer>
 </template>

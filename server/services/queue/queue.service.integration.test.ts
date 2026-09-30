@@ -4,7 +4,7 @@
 import { and, eq, inArray, sql } from 'drizzle-orm'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { useDb } from '../../db'
-import { queueEntries } from '../../db/schema'
+import { customers, queueEntries } from '../../db/schema'
 import { createShopFixture, resetDatabase, type ShopFixture } from '../../testing/fixtures'
 import { DomainError, type DomainErrorCode } from '../errors'
 import {
@@ -12,6 +12,7 @@ import {
   cancelEntry,
   completeService,
   getActiveQueue,
+  getTodayStats,
   markNoShow,
   startService,
   type ShopQueue
@@ -271,5 +272,63 @@ describe('queue service (PostgreSQL)', () => {
       // B and C moved up without their rows being touched.
       expect(after).toEqual(before)
     })
+  })
+})
+
+describe('getTodayStats', () => {
+  // 01:30 on 1 October in the shop's timezone (Asia/Kolkata, UTC+5:30),
+  // while it is still 30 September in UTC. Local midnight = 2026-09-30T18:30Z.
+  const now = new Date('2026-09-30T20:00:00.000Z')
+  const beforeMidnight = new Date('2026-09-30T18:00:00.000Z')
+  const afterMidnight = new Date('2026-09-30T19:00:00.000Z')
+
+  async function insertEntry(
+    status: 'WAITING' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED' | 'NO_SHOW',
+    joinedAt: Date,
+    endedAt: Date | null,
+    priceMinor: number
+  ) {
+    const [customer] = await useDb().insert(customers).values({ name: 'Stats' }).returning({ id: customers.id })
+    await useDb().insert(queueEntries).values({
+      shopId: shop.shopId,
+      barberId: shop.barberId,
+      customerId: customer!.id,
+      serviceId: shop.services.haircut,
+      source: 'WALK_IN',
+      status,
+      serviceName: 'Haircut',
+      durationMinutes: 20,
+      priceMinor,
+      joinedAt,
+      startedAt: status === 'COMPLETED' || status === 'IN_PROGRESS' ? joinedAt : null,
+      endedAt
+    })
+  }
+
+  it('counts only today in the shop’s timezone', async () => {
+    // Yesterday (local): ignored entirely.
+    await insertEntry('COMPLETED', beforeMidnight, beforeMidnight, 15000)
+    // Joined yesterday but completed today: a service completed today, not a customer today.
+    await insertEntry('COMPLETED', beforeMidnight, afterMidnight, 22000)
+    // Today.
+    await insertEntry('COMPLETED', afterMidnight, afterMidnight, 10000)
+    await insertEntry('IN_PROGRESS', afterMidnight, null, 15000)
+    await insertEntry('WAITING', afterMidnight, null, 15000)
+    await insertEntry('CANCELLED', afterMidnight, afterMidnight, 15000)
+    await insertEntry('NO_SHOW', afterMidnight, afterMidnight, 15000)
+
+    expect(await getTodayStats(shop.shopId, now)).toEqual({
+      customers: 3,
+      servicesCompleted: 2,
+      completedRevenueMinor: 32000
+    })
+  })
+
+  it('returns zeros for a quiet day', async () => {
+    expect(await getTodayStats(shop.shopId, now)).toEqual({ customers: 0, servicesCompleted: 0, completedRevenueMinor: 0 })
+  })
+
+  it('rejects an unknown shop', async () => {
+    await expectDomainError(getTodayStats('00000000-0000-4000-8000-000000000000', now), 'SHOP_NOT_FOUND')
   })
 })

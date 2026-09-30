@@ -5,6 +5,16 @@ export default defineNuxtConfig({
 
   modules: ['@nuxt/ui', '@pinia/nuxt'],
 
+  // Components are grouped in folders by feature but named by file
+  // (components/queue/QueueItem.vue → <QueueItem>).
+  components: [{ path: '~/components', pathPrefix: false }],
+
+  app: {
+    head: {
+      title: 'Trimly'
+    }
+  },
+
   css: ['~/assets/css/main.css'],
 
   typescript: {

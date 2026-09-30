@@ -36,6 +36,7 @@
     "zod": "^4.6.5"
   },
   "devDependencies": {
+    "@iconify-json/lucide": "^1.2.137",
     "@types/pg": "^8.23.1",
     "drizzle-kit": "^0.31.11",
     "jiti": "^2.7.0",

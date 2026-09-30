@@ -326,3 +326,44 @@ describe('POST /api/queue/:id/{start,complete,cancel,no-show}', () => {
     expect(stored?.status).toBe('WAITING')
   })
 })
+
+describe('GET /api/dashboard', () => {
+  it('returns the owner’s shop, name and today’s numbers', async () => {
+    const entryId = (await joinAsCustomer('Arjun', '+919990000001')).json.data.entry.id as string
+    await walkIn('Walk-in')
+    await act('start', entryId)
+    await act('complete', entryId)
+
+    const response = await request('GET', '/api/dashboard', { cookie: owner.cookie })
+
+    expect(response.status).toBe(200)
+    expect(response.json.data).toEqual({
+      shop: { id: shop.shopId, name: 'Test Barber', slug: 'test-barber', timezone: 'Asia/Kolkata', currency: 'INR' },
+      owner: { name: 'Test User' },
+      today: { customers: 2, servicesCompleted: 1, completedRevenueMinor: 15000 }
+    })
+  })
+
+  it('requires sign-in (401) and a shop (403)', async () => {
+    expectError(await request('GET', '/api/dashboard'), 401, 'UNAUTHENTICATED')
+    expectError(await request('GET', '/api/dashboard', { cookie: outsider.cookie }), 403, 'FORBIDDEN')
+  })
+})
+
+describe('GET /api/shops/:shopId/services', () => {
+  it('lists active services, cheapest first, without sign-in', async () => {
+    const response = await request('GET', `/api/shops/${shop.shopId}/services`)
+
+    expect(response.status).toBe(200)
+    expect(response.json.data).toEqual([
+      { id: shop.services.beard, name: 'Beard', durationMinutes: 10, priceMinor: 10000 },
+      { id: shop.services.haircut, name: 'Haircut', durationMinutes: 20, priceMinor: 15000 },
+      { id: shop.services.haircutAndBeard, name: 'Haircut + Beard', durationMinutes: 30, priceMinor: 22000 }
+    ])
+  })
+
+  it('validates the shop id (400) and rejects an unknown shop (404)', async () => {
+    expectError(await request('GET', '/api/shops/not-a-uuid/services'), 400, 'VALIDATION_ERROR')
+    expectError(await request('GET', `/api/shops/${randomUUID()}/services`), 404, 'SHOP_NOT_FOUND')
+  })
+})

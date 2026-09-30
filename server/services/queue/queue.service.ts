@@ -1,7 +1,7 @@
 // Queue use cases: loads rows, delegates all ordering/ETA math to the pure
 // functions in queue-state.ts, and maps database constraints to domain errors.
 // ETAs are never stored; every read (and every mutation's result) recalculates them.
-import { and, asc, desc, eq, gte, inArray, isNotNull, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, gte, inArray, isNotNull, lt, or, sql } from 'drizzle-orm'
 import type { QueueEntrySource, QueueEntryStatus } from '../../../shared/constants'
 import { useDb, type Transaction } from '../../db'
 import { isUniqueViolation } from '../../db/errors'
@@ -174,6 +174,42 @@ async function loadShopQueue(shopId: string, now: Date, barberId?: string): Prom
 /** Every barber's live queue with positions and ETAs, calculated now. */
 export function getActiveQueue(shopId: string, now = new Date()): Promise<ShopQueue> {
   return loadShopQueue(shopId, now)
+}
+
+export interface TodayStats {
+  /** Joined today and not cancelled or marked no-show. */
+  customers: number
+  servicesCompleted: number
+  /** Sum of the prices of services completed today. Stands in for revenue until payments exist. */
+  completedRevenueMinor: number
+}
+
+/** Today's numbers, where "today" is the current calendar day in the shop's timezone. */
+export async function getTodayStats(shopId: string, now = new Date()): Promise<TodayStats> {
+  const db = useDb()
+
+  const shop = await db.query.shops.findFirst({ where: eq(shops.id, shopId), columns: { timezone: true } })
+  if (!shop) {
+    throw new DomainError('SHOP_NOT_FOUND', 404, 'Shop not found')
+  }
+
+  // Local midnight in the shop's timezone, as an absolute timestamp.
+  const dayStart = sql`(date_trunc('day', ${now.toISOString()}::timestamptz at time zone ${shop.timezone}) at time zone ${shop.timezone})`
+  const dayEnd = sql`(${dayStart} + interval '1 day')`
+  const joinedToday = and(gte(queueEntries.joinedAt, dayStart), lt(queueEntries.joinedAt, dayEnd))
+  const endedToday = and(gte(queueEntries.endedAt, dayStart), lt(queueEntries.endedAt, dayEnd))
+  const completedToday = and(eq(queueEntries.status, 'COMPLETED'), endedToday)
+
+  const [row] = await db
+    .select({
+      customers: sql<number>`count(*) filter (where ${joinedToday} and ${queueEntries.status} not in ('CANCELLED', 'NO_SHOW'))`.mapWith(Number),
+      servicesCompleted: sql<number>`count(*) filter (where ${completedToday})`.mapWith(Number),
+      completedRevenueMinor: sql<number>`coalesce(sum(${queueEntries.priceMinor}) filter (where ${completedToday}), 0)`.mapWith(Number)
+    })
+    .from(queueEntries)
+    .where(and(eq(queueEntries.shopId, shopId), or(joinedToday, endedToday)))
+
+  return row ?? { customers: 0, servicesCompleted: 0, completedRevenueMinor: 0 }
 }
 
 /** One entry's live status by its tracking code (the customer's view). */

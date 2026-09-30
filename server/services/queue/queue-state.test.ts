@@ -24,19 +24,19 @@ function entry(
   status: QueueEntryStatus,
   overrides: Partial<QueueEntryTiming> = {}
 ): QueueEntryTiming {
-  return { id, status, joinedAt: at(-60), startedAt: null, durationMinutes: 20, ...overrides }
+  return { id, status, orderAt: at(-60), startedAt: null, durationMinutes: 20, ...overrides }
 }
 
 describe('calculateQueuePosition / calculateCustomersAhead', () => {
   const entries = [
-    entry('c', 'WAITING', { joinedAt: at(-10) }),
-    entry('a', 'WAITING', { joinedAt: at(-30) }),
-    entry('b', 'WAITING', { joinedAt: at(-20) }),
-    entry('x', 'IN_PROGRESS', { joinedAt: at(-40), startedAt: at(-5) }),
-    entry('done', 'COMPLETED', { joinedAt: at(-50) })
+    entry('c', 'WAITING', { orderAt: at(-10) }),
+    entry('a', 'WAITING', { orderAt: at(-30) }),
+    entry('b', 'WAITING', { orderAt: at(-20) }),
+    entry('x', 'IN_PROGRESS', { orderAt: at(-40), startedAt: at(-5) }),
+    entry('done', 'COMPLETED', { orderAt: at(-50) })
   ]
 
-  it('orders WAITING entries by joinedAt', () => {
+  it('orders WAITING entries by orderAt', () => {
     expect(calculateQueuePosition(entries, 'a')).toBe(1)
     expect(calculateQueuePosition(entries, 'b')).toBe(2)
     expect(calculateQueuePosition(entries, 'c')).toBe(3)
@@ -59,8 +59,8 @@ describe('calculateQueuePosition / calculateCustomersAhead', () => {
     expect(calculateCustomersAhead(idle, 'a')).toBe(0)
   })
 
-  it('breaks joinedAt ties by id so the order is stable', () => {
-    const tied = [entry('b', 'WAITING', { joinedAt: at(-5) }), entry('a', 'WAITING', { joinedAt: at(-5) })]
+  it('breaks orderAt ties by id so the order is stable', () => {
+    const tied = [entry('b', 'WAITING', { orderAt: at(-5) }), entry('a', 'WAITING', { orderAt: at(-5) })]
     expect(calculateQueuePosition(tied, 'a')).toBe(1)
     expect(calculateQueuePosition(tied, 'b')).toBe(2)
   })
@@ -113,8 +113,8 @@ describe('calculateQueueState', () => {
     const state = calculateQueueState(
       [
         entry('current', 'IN_PROGRESS', { startedAt: at(-5), durationMinutes: 20 }),
-        entry('first', 'WAITING', { joinedAt: at(-20), durationMinutes: 10 }),
-        entry('second', 'WAITING', { joinedAt: at(-10), durationMinutes: 30 })
+        entry('first', 'WAITING', { orderAt: at(-20), durationMinutes: 10 }),
+        entry('second', 'WAITING', { orderAt: at(-10), durationMinutes: 30 })
       ],
       { now: NOW, bufferMinutes: 5 }
     )

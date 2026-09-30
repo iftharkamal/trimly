@@ -3,6 +3,9 @@ export default defineNuxtConfig({
   compatibilityDate: '2025-07-15',
   devtools: { enabled: true },
 
+  // The API tests build into their own directory so they can run while `pnpm dev` is running.
+  buildDir: process.env.NUXT_BUILD_DIR || '.nuxt',
+
   modules: ['@nuxt/ui', '@pinia/nuxt'],
 
   // Components are grouped in folders by feature but named by file

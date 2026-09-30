@@ -21,7 +21,7 @@ interface ApiResponse {
 }
 
 async function request(
-  method: 'GET' | 'POST' | 'PATCH',
+  method: 'GET' | 'POST' | 'PATCH' | 'PUT',
   path: string,
   options: { body?: unknown, rawBody?: string, cookie?: string } = {}
 ): Promise<ApiResponse> {
@@ -628,5 +628,101 @@ describe('GET /api/reports', () => {
   it('requires the owner (401, 403)', async () => {
     expectError(await report('', null), 401, 'UNAUTHENTICATED')
     expectError(await report('', outsider.cookie), 403, 'FORBIDDEN')
+  })
+})
+
+describe('opening hours: GET/PUT /api/dashboard/hours', () => {
+  const week = (ranges: { opens: string, closes: string }[]) =>
+    ({ days: [1, 2, 3, 4, 5, 6, 7].map(weekday => ({ weekday, ranges: weekday === 7 ? [] : ranges })) })
+
+  it('saves and returns the weekly schedule', async () => {
+    const body = week([{ opens: '09:00', closes: '13:00' }, { opens: '14:00', closes: '20:00' }])
+
+    const saved = await request('PUT', '/api/dashboard/hours', { body, cookie: owner.cookie })
+    expect(saved.status).toBe(200)
+    expect(saved.json.data).toEqual(body)
+
+    expect((await request('GET', '/api/dashboard/hours', { cookie: owner.cookie })).json.data).toEqual(body)
+  })
+
+  it('rejects invalid schedules (400)', async () => {
+    const put = (body: unknown) => request('PUT', '/api/dashboard/hours', { body, cookie: owner.cookie })
+
+    expectError(await put(week([{ opens: '18:00', closes: '09:00' }])), 400, 'VALIDATION_ERROR')
+    expectError(await put(week([{ opens: '09:00', closes: '14:00' }, { opens: '13:00', closes: '20:00' }])), 400, 'VALIDATION_ERROR')
+    expectError(await put(week([{ opens: '9am', closes: '5pm' }])), 400, 'VALIDATION_ERROR')
+    expectError(await put({ days: [] }), 400, 'VALIDATION_ERROR')
+  })
+
+  it('requires the owner (401, 403)', async () => {
+    expectError(await request('GET', '/api/dashboard/hours'), 401, 'UNAUTHENTICATED')
+    expectError(await request('GET', '/api/dashboard/hours', { cookie: outsider.cookie }), 403, 'FORBIDDEN')
+  })
+})
+
+describe('appointments: /api/dashboard/appointments', () => {
+  function inMinutes(minutes: number) {
+    return new Date(Math.ceil(Date.now() / 60_000) * 60_000 + minutes * 60_000).toISOString()
+  }
+
+  function bookVia(body: Record<string, unknown>, cookie: string | null = owner.cookie) {
+    return request('POST', '/api/dashboard/appointments', { body, cookie: cookie ?? undefined })
+  }
+
+  const booking = (startsAt: string, phone = '+919990000200') => ({
+    customer: { name: 'Booked', phone },
+    serviceId: shop.services.haircut,
+    startsAt
+  })
+
+  it('books, lists, and checks in into the queue', async () => {
+    const startsAt = inMinutes(60)
+    const created = await bookVia(booking(startsAt))
+    expect(created.status).toBe(201)
+    expect(created.json.data).toMatchObject({ status: 'BOOKED', source: 'BARBER', serviceName: 'Haircut' })
+
+    // A window around the booking, wide enough for any timezone offset.
+    const from = new Date(Date.parse(startsAt) - 86_400_000).toISOString().slice(0, 10)
+    const to = new Date(Date.parse(startsAt) + 2 * 86_400_000).toISOString().slice(0, 10)
+    const list = await request('GET', `/api/dashboard/appointments?from=${from}&to=${to}`, { cookie: owner.cookie })
+    expect(list.status).toBe(200)
+    expect(list.json.data.map((item: { id: string }) => item.id)).toContain(created.json.data.id)
+
+    const checkedIn = await request('POST', `/api/dashboard/appointments/${created.json.data.id}/check-in`, { cookie: owner.cookie })
+    expect(checkedIn.status).toBe(200)
+    expect(checkedIn.json.data.view).toBe('owner')
+    expect(checkedIn.json.data.barbers[0].waiting[0].entry).toMatchObject({ source: 'APPOINTMENT', customer: { name: 'Booked' } })
+
+    expectError(await request('POST', `/api/dashboard/appointments/${created.json.data.id}/check-in`, { cookie: owner.cookie }), 409, 'INVALID_TRANSITION')
+  })
+
+  it('rejects taken, past and invalid bookings', async () => {
+    const startsAt = inMinutes(90)
+    await bookVia(booking(startsAt))
+
+    expectError(await bookVia(booking(startsAt, '+919990000201')), 409, 'SLOT_TAKEN')
+    expectError(await bookVia(booking(inMinutes(-10), '+919990000202')), 400, 'INVALID_TIME')
+    expectError(await bookVia(booking('tomorrow at 10', '+919990000203')), 400, 'VALIDATION_ERROR')
+    expectError(await bookVia({ ...booking(inMinutes(300), '+919990000204'), status: 'CHECKED_IN' }), 400, 'VALIDATION_ERROR')
+  })
+
+  it('cancels or marks a no-show, only while booked', async () => {
+    const first = (await bookVia(booking(inMinutes(60)))).json.data.id as string
+    const cancelled = await request('POST', `/api/dashboard/appointments/${first}/cancel`, { cookie: owner.cookie })
+    expect(cancelled.json.data.status).toBe('CANCELLED')
+    expectError(await request('POST', `/api/dashboard/appointments/${first}/no-show`, { cookie: owner.cookie }), 409, 'INVALID_TRANSITION')
+
+    const second = (await bookVia(booking(inMinutes(120), '+919990000210'))).json.data.id as string
+    const noShow = await request('POST', `/api/dashboard/appointments/${second}/no-show`, { cookie: owner.cookie })
+    expect(noShow.json.data.status).toBe('NO_SHOW')
+  })
+
+  it('validates list ranges and ids, and requires the owner', async () => {
+    expectError(await request('GET', '/api/dashboard/appointments?from=2026-10-10&to=2026-10-01', { cookie: owner.cookie }), 400, 'VALIDATION_ERROR')
+    expectError(await request('GET', '/api/dashboard/appointments?from=2026-01-01&to=2026-12-31', { cookie: owner.cookie }), 400, 'VALIDATION_ERROR')
+    expectError(await request('POST', '/api/dashboard/appointments/not-a-uuid/cancel', { cookie: owner.cookie }), 400, 'VALIDATION_ERROR')
+    expectError(await request('POST', `/api/dashboard/appointments/${randomUUID()}/cancel`, { cookie: owner.cookie }), 404, 'APPOINTMENT_NOT_FOUND')
+    expectError(await bookVia(booking(inMinutes(60)), null), 401, 'UNAUTHENTICATED')
+    expectError(await bookVia(booking(inMinutes(60)), outsider.cookie), 403, 'FORBIDDEN')
   })
 })

@@ -4,7 +4,8 @@
 export const QUEUE_ENTRY_STATUSES = ['WAITING', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED', 'NO_SHOW'] as const
 export type QueueEntryStatus = (typeof QUEUE_ENTRY_STATUSES)[number]
 
-export const QUEUE_ENTRY_SOURCES = ['ONLINE', 'WALK_IN'] as const
+// APPOINTMENT: created by checking in a booked appointment.
+export const QUEUE_ENTRY_SOURCES = ['ONLINE', 'WALK_IN', 'APPOINTMENT'] as const
 export type QueueEntrySource = (typeof QUEUE_ENTRY_SOURCES)[number]
 
 export const PAYMENT_STATUSES = ['PENDING', 'PAID', 'REFUNDED'] as const
@@ -30,3 +31,11 @@ export const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {
 
 export const REPORT_PERIODS = ['day', 'week', 'month'] as const
 export type ReportPeriod = (typeof REPORT_PERIODS)[number]
+
+// CHECKED_IN hands the visit over to the queue (which tracks the service itself).
+export const APPOINTMENT_STATUSES = ['BOOKED', 'CHECKED_IN', 'CANCELLED', 'NO_SHOW'] as const
+export type AppointmentStatus = (typeof APPOINTMENT_STATUSES)[number]
+
+// Who made the booking: the customer online, or the barber from the dashboard.
+export const BOOKING_SOURCES = ['ONLINE', 'BARBER'] as const
+export type BookingSource = (typeof BOOKING_SOURCES)[number]

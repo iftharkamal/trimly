@@ -249,14 +249,16 @@ describe('queue service (PostgreSQL)', () => {
 
   describe('15. queue position is derived, not stored', () => {
     it('has no stored position or ETA column', async () => {
-      const result = await useDb().execute<{ column_name: string }>(sql`
-        select column_name from information_schema.columns
+      const result = await useDb().execute<{ column_name: string, data_type: string }>(sql`
+        select column_name, data_type from information_schema.columns
         where table_schema = 'public' and table_name = 'queue_entries'
       `)
-      const columns = result.rows.map(row => row.column_name)
+      const columns = new Map(result.rows.map(row => [row.column_name, row.data_type]))
 
-      expect(columns).toContain('joined_at')
-      expect(columns.filter(name => /position|rank|order|eta|estimate|wait/.test(name))).toEqual([])
+      expect(columns.has('joined_at')).toBe(true)
+      expect([...columns.keys()].filter(name => /position|rank|eta|estimate|wait/.test(name))).toEqual([])
+      // order_at is the sort key: a time (joined, or booked for appointments), not a position.
+      expect(columns.get('order_at')).toBe('timestamp with time zone')
     })
 
     it('changes positions without writing to the other entries', async () => {

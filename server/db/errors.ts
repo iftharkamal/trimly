@@ -19,3 +19,8 @@ export function isUniqueViolation(error: unknown, constraint: string): boolean {
   const pgError = findPgError(error)
   return pgError?.code === '23505' && pgError.constraint === constraint
 }
+
+export function isExclusionViolation(error: unknown, constraint: string): boolean {
+  const pgError = findPgError(error)
+  return pgError?.code === '23P01' && pgError.constraint === constraint
+}

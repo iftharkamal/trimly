@@ -9,6 +9,10 @@ export type DomainErrorCode =
   | 'ALREADY_IN_QUEUE'
   | 'BARBER_BUSY'
   | 'INVALID_TRANSITION'
+  | 'APPOINTMENT_NOT_FOUND'
+  | 'SLOT_TAKEN'
+  | 'ALREADY_BOOKED'
+  | 'INVALID_TIME'
 
 /**
  * An expected business-rule failure. Services throw it without knowing about

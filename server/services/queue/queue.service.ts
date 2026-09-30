@@ -15,6 +15,8 @@ import {
   services,
   shops
 } from '../../db/schema'
+import { getHoldsByBarber } from '../appointment.service'
+import { findOrCreateCustomer } from '../customer.service'
 import { localDayRange, type TimeRange } from '../day-range'
 import { DomainError } from '../errors'
 import { recordPayment } from '../payment.service'
@@ -36,6 +38,8 @@ export interface ActiveQueueEntry {
   status: QueueEntryStatus
   source: QueueEntrySource
   joinedAt: Date
+  /** Queue order key (booked time for a checked-in appointment). */
+  orderAt: Date
   startedAt: Date | null
   serviceName: string
   durationMinutes: number
@@ -117,7 +121,7 @@ async function loadShopQueue(shopId: string, now: Date, barberId?: string): Prom
   // Only a service that ended within the buffer window can delay the next start.
   const bufferCutoff = new Date(now.getTime() - shop.serviceBufferMinutes * MINUTE_MS)
 
-  const [shopBarbers, entryRows, recentEnds] = await Promise.all([
+  const [shopBarbers, entryRows, recentEnds, holdsByBarber] = await Promise.all([
     db
       .select({ id: barbers.id, name: barbers.name, isActive: barbers.isActive })
       .from(barbers)
@@ -131,6 +135,7 @@ async function loadShopQueue(shopId: string, now: Date, barberId?: string): Prom
         status: queueEntries.status,
         source: queueEntries.source,
         joinedAt: queueEntries.joinedAt,
+        orderAt: queueEntries.orderAt,
         startedAt: queueEntries.startedAt,
         serviceName: queueEntries.serviceName,
         durationMinutes: queueEntries.durationMinutes,
@@ -156,7 +161,10 @@ async function loadShopQueue(shopId: string, now: Date, barberId?: string): Prom
         gte(queueEntries.endedAt, bufferCutoff),
         barberId ? eq(queueEntries.barberId, barberId) : undefined
       ))
-      .orderBy(queueEntries.barberId, desc(queueEntries.endedAt))
+      .orderBy(queueEntries.barberId, desc(queueEntries.endedAt)),
+
+    // Booked appointments hold their time until the customer checks in.
+    getHoldsByBarber(shopId, now, barberId)
   ])
 
   const entriesByBarber = new Map<string, ActiveQueueEntry[]>()
@@ -175,7 +183,8 @@ async function loadShopQueue(shopId: string, now: Date, barberId?: string): Prom
       const state = calculateQueueState(entriesByBarber.get(barber.id) ?? [], {
         now,
         bufferMinutes: shop.serviceBufferMinutes,
-        lastServiceEndedAt: lastEndByBarber.get(barber.id) ?? null
+        lastServiceEndedAt: lastEndByBarber.get(barber.id) ?? null,
+        holds: holdsByBarber.get(barber.id) ?? []
       })
       return { barber, state, joinPreview: calculateJoinPreview(state, now) }
     })
@@ -308,34 +317,39 @@ export async function getQueueEntryByTrackingCode(trackingCode: string, now = ne
   }
 }
 
-async function findOrCreateCustomer(tx: Transaction, customer: AddCustomerInput['customer']): Promise<string> {
-  if (!customer.phone) {
-    const [created] = await tx.insert(customers).values({ name: customer.name }).returning({ id: customers.id })
-    if (!created) {
-      throw new Error('Failed to create customer')
+export interface CheckedInEntryInput {
+  shopId: string
+  barberId: string
+  customerId: string
+  serviceId: string
+  serviceName: string
+  durationMinutes: number
+  priceMinor: number
+  /** The booked time: orders the entry among walk-ins. */
+  orderAt: Date
+}
+
+/**
+ * Adds a checked-in appointment to its barber's queue, inside the caller's
+ * transaction. Ordered by its booked time rather than its arrival.
+ */
+export async function insertCheckedInEntry(tx: Transaction, input: CheckedInEntryInput): Promise<string> {
+  try {
+    const [entry] = await tx
+      .insert(queueEntries)
+      .values({ ...input, source: 'APPOINTMENT' })
+      .returning({ id: queueEntries.id })
+    if (!entry) {
+      throw new Error('Failed to insert queue entry')
     }
-    return created.id
+    return entry.id
   }
-
-  // Insert-or-select so two concurrent joins with the same new phone don't collide.
-  // An existing customer's stored name is kept.
-  const [created] = await tx
-    .insert(customers)
-    .values({ name: customer.name, phone: customer.phone })
-    .onConflictDoNothing({ target: customers.phone })
-    .returning({ id: customers.id })
-  if (created) {
-    return created.id
+  catch (error) {
+    if (isUniqueViolation(error, ONE_ACTIVE_PER_CUSTOMER_SHOP)) {
+      throw new DomainError('ALREADY_IN_QUEUE', 409, 'This customer is already in the queue')
+    }
+    throw error
   }
-
-  const existing = await tx.query.customers.findFirst({
-    where: eq(customers.phone, customer.phone),
-    columns: { id: true }
-  })
-  if (!existing) {
-    throw new Error('Failed to find or create customer')
-  }
-  return existing.id
 }
 
 async function resolveBarberId(shopId: string, barberId: string | null | undefined, now: Date): Promise<string> {

@@ -25,14 +25,14 @@ function offsetInMinutes(date: Date | null | undefined): number | null {
 }
 
 function waiting(id: string, joinedMinutesAgo: number, durationMinutes: number): QueueEntryTiming {
-  return { id, status: 'WAITING', joinedAt: minutesFromNow(-joinedMinutesAgo), startedAt: null, durationMinutes }
+  return { id, status: 'WAITING', orderAt: minutesFromNow(-joinedMinutesAgo), startedAt: null, durationMinutes }
 }
 
 function inProgress(id: string, startedMinutesAgo: number, durationMinutes: number): QueueEntryTiming {
   return {
     id,
     status: 'IN_PROGRESS',
-    joinedAt: minutesFromNow(-startedMinutesAgo - 10),
+    orderAt: minutesFromNow(-startedMinutesAgo - 10),
     startedAt: minutesFromNow(-startedMinutesAgo),
     durationMinutes
   }
@@ -245,7 +245,7 @@ describe('queue engine scenarios', () => {
       const state = calculateQueueState(entries, { now: NOW, bufferMinutes: 5 })
 
       expect(state.waiting.map(item => item.position)).toEqual([1, 2])
-      expect(Object.keys(entries[1]!)).toEqual(['id', 'status', 'joinedAt', 'startedAt', 'durationMinutes'])
+      expect(Object.keys(entries[1]!)).toEqual(['id', 'status', 'orderAt', 'startedAt', 'durationMinutes'])
     })
   })
 
@@ -274,5 +274,86 @@ describe('queue engine scenarios', () => {
       const after = queue([withStatus(current, 'COMPLETED'), next], { lastServiceEndedAt: minutesFromNow(-3) })
       expect(waitingEntry(after, 'a').start).toBe(2)
     })
+  })
+})
+
+describe('appointments: holding booked time', () => {
+  function hold(fromMinutes: number, toMinutes: number) {
+    return { start: minutesFromNow(fromMinutes), end: minutesFromNow(toMinutes) }
+  }
+
+  it('a waiting customer who finishes (plus buffer) before the booking goes first', () => {
+    // Haircut 0–20, buffer to 25, appointment at 30.
+    const state = queue([waiting('a', 5, HAIRCUT)], { holds: [hold(30, 50)] })
+    expect(waitingEntry(state, 'a')).toMatchObject({ start: 0, end: 20 })
+  })
+
+  it('fits exactly when service plus buffer ends at the booked time', () => {
+    const state = queue([waiting('a', 5, HAIRCUT)], { holds: [hold(25, 45)] })
+    expect(waitingEntry(state, 'a').start).toBe(0)
+  })
+
+  it('a customer who would run into the booking waits until after it (plus buffer)', () => {
+    const state = queue([waiting('a', 5, HAIRCUT)], { holds: [hold(20, 40)] })
+    expect(waitingEntry(state, 'a')).toMatchObject({ position: 1, start: 45, end: 65, wait: 45 })
+  })
+
+  it('skips several bookings in a row until the service fits', () => {
+    // After the first booking: 45–65 (+5) runs into the second at 50, so after that: 75.
+    const state = queue([waiting('a', 5, HAIRCUT)], { holds: [hold(50, 70), hold(20, 40)] })
+    expect(waitingEntry(state, 'a').start).toBe(75)
+  })
+
+  it('plans each waiting customer in turn around the booking', () => {
+    // Beard 0–10 (+5 = 15) fits before 20; the haircut would not, so it goes after: 45.
+    const state = queue([waiting('a', 10, BEARD), waiting('b', 5, HAIRCUT)], { holds: [hold(20, 40)] })
+    expect(summarize(state).map(({ id, start }) => ({ id, start }))).toEqual([
+      { id: 'a', start: 0 },
+      { id: 'b', start: 45 }
+    ])
+  })
+
+  it('keeps first come, first served: a gap too short for #1 is not given to #2', () => {
+    // #1's haircut can't fit before 15, so #1 goes at 40; #2's short beard waits behind #1.
+    const state = queue([waiting('a', 10, HAIRCUT), waiting('b', 5, BEARD)], { holds: [hold(15, 35)] })
+    expect(waitingEntry(state, 'a').start).toBe(40)
+    expect(waitingEntry(state, 'b').start).toBe(65)
+  })
+
+  it('works after the current service too', () => {
+    // Current ends +15; beard 20–30 (+5 = 35) runs into the booking at 30, so after it: 55.
+    const state = queue(
+      [inProgress('x', 5, HAIRCUT), waiting('a', 5, BEARD)],
+      { holds: [hold(30, 50)] }
+    )
+    expect(waitingEntry(state, 'a').start).toBe(55)
+  })
+
+  it('ignores bookings that are already over', () => {
+    const state = queue([waiting('a', 5, HAIRCUT)], { holds: [hold(-40, -20)] })
+    expect(waitingEntry(state, 'a').start).toBe(0)
+  })
+
+  it('keeps holding a late booking until its end time', () => {
+    // Booked from 10 minutes ago, not checked in yet: the barber waits until it would have ended.
+    const state = queue([waiting('a', 5, BEARD)], { holds: [hold(-10, 10)] })
+    expect(waitingEntry(state, 'a').start).toBe(15)
+  })
+
+  it('"join now" skips booked time', () => {
+    expect(offsetInMinutes(queue([], { holds: [hold(0, 20)] }).nextAvailableAt)).toBe(25)
+    // Anything could still start before a booking that's far enough away.
+    expect(offsetInMinutes(queue([], { holds: [hold(30, 50)] }).nextAvailableAt)).toBe(0)
+  })
+
+  it('a checked-in appointment is ordered by its booked time, not its arrival', () => {
+    // Walk-in A joined 30 min ago; the appointment was booked for 10 min ago
+    // (checked in just now); walk-in B joined 5 min ago.
+    const state = queue([
+      waiting('walk-in-a', 30, HAIRCUT),
+      { ...waiting('appointment', 10, HAIRCUT) },
+      waiting('walk-in-b', 5, BEARD)
+    ])
+    expect(summarize(state).map(item => item.id)).toEqual(['walk-in-a', 'appointment', 'walk-in-b'])
   })
 })

@@ -328,7 +328,65 @@ previous period, plus a revenue trend.
 
 **Errors:** 400 `VALIDATION_ERROR` · 401 `UNAUTHENTICATED` · 403 `FORBIDDEN`.
 
+## Opening hours
+
+### `GET /api/dashboard/hours` · `PUT /api/dashboard/hours`
+
+Weekly hours for the shop, in shop time. **Auth:** owner only.
+
+```json
+{ "days": [
+  { "weekday": 1, "ranges": [{ "opens": "09:00", "closes": "13:00" }, { "opens": "14:00", "closes": "20:00" }] },
+  { "weekday": 7, "ranges": [] }
+] }
+```
+
+- `weekday`: ISO, 1 = Monday … 7 = Sunday. `PUT` must list all 7 days exactly once and replaces the schedule.
+- Each day has 0–2 ranges (0 = closed) in 24-hour `HH:MM`, in order and not overlapping.
+- Used for online booking availability (coming). The manual Open/Closed switch still controls online queue joins.
+
+**Errors:** 400 `VALIDATION_ERROR` · 401 · 403.
+
+## Appointments (barber)
+
+A booked appointment **holds its time** in the queue: waiting customers whose service
+(plus the buffer) wouldn't finish before it are planned after it, and "join now" estimates
+skip it. A late appointment keeps its time until its end. Once checked in, the customer
+joins the queue **ordered by their booked time** (ahead of walk-ins who joined after it).
+
+`AppointmentDto`:
+
+```json
+{
+  "id": "…", "status": "BOOKED", "source": "BARBER", "trackingCode": "…",
+  "startsAt": "2026-10-01T05:00:00.000Z", "endsAt": "2026-10-01T05:20:00.000Z",
+  "serviceName": "Haircut", "durationMinutes": 20, "priceMinor": 15000,
+  "barber": { "id": "…", "name": "Faisal" },
+  "customer": { "id": "…", "name": "Arjun", "phone": "+919876543210" },
+  "queueEntryId": null, "checkedInAt": null, "endedAt": null, "createdAt": "…"
+}
+```
+
+`status`: `BOOKED` → `CHECKED_IN` (then the queue entry carries the visit) · `CANCELLED` · `NO_SHOW`.
+
+| Endpoint | Notes |
+|---|---|
+| `GET /api/dashboard/appointments?from=YYYY-MM-DD&to=YYYY-MM-DD` | Starting on shop dates [from, to), at most 62 days. Earliest first |
+| `POST /api/dashboard/appointments` | Body: `{ customer: { name, phone? }, serviceId, barberId?, startsAt }` (`startsAt` ISO with offset). **201** `AppointmentDto` |
+| `POST /api/dashboard/appointments/:id/check-in` | Customer arrived → queue entry (`source: "APPOINTMENT"`). **200** recalculated queue (owner view) |
+| `POST /api/dashboard/appointments/:id/cancel` | `BOOKED` → `CANCELLED`. **200** `AppointmentDto` |
+| `POST /api/dashboard/appointments/:id/no-show` | `BOOKED` → `NO_SHOW`. **200** `AppointmentDto` |
+
+- **Auth:** owner only. Omit `barberId` for "any barber" (the first free one at that time).
+- A barber can't be double-booked: overlapping active appointments are rejected by the
+  database, even when two bookings arrive at once. Back-to-back bookings are fine.
+- One upcoming (`BOOKED`) appointment per customer per shop.
+
+**Errors:** 400 `VALIDATION_ERROR` / `INVALID_TIME` (not in the future) · 401 · 403 ·
+404 `APPOINTMENT_NOT_FOUND` / `SERVICE_NOT_FOUND` / `BARBER_NOT_FOUND` ·
+409 `SLOT_TAKEN` / `ALREADY_BOOKED` / `INVALID_TRANSITION` / `ALREADY_IN_QUEUE`.
+
 ## Tests
 
-`pnpm test:api` builds the app, starts it against the `_test` database and calls every
+`pnpm test:api` builds the app (into `.nuxt-test`, so it can run beside `pnpm dev`), starts it against the `_test` database and calls every
 endpoint over HTTP (see [`server/testing/api/queue.api.test.ts`](../server/testing/api/queue.api.test.ts)).

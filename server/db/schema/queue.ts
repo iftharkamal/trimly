@@ -15,7 +15,7 @@ export const ONE_IN_PROGRESS_PER_BARBER = 'queue_entries_one_in_progress_per_bar
 export const ONE_ACTIVE_PER_CUSTOMER_SHOP = 'queue_entries_one_active_per_customer_shop'
 
 // Queue positions and ETAs are never stored. A barber's queue order is the
-// WAITING entries sorted by (joined_at, id); ETAs come from the IN_PROGRESS
+// WAITING entries sorted by (order_at, id); ETAs come from the IN_PROGRESS
 // entry's started_at plus the snapshotted durations, computed at read time.
 export const queueEntries = pgTable(
   'queue_entries',
@@ -42,6 +42,9 @@ export const queueEntries = pgTable(
     durationMinutes: integer('duration_minutes').notNull(),
     priceMinor: integer('price_minor').notNull(),
     joinedAt: timestamp('joined_at', { withTimezone: true }).notNull().defaultNow(),
+    // Queue order key: when the customer joined, or for a checked-in appointment
+    // its booked time (so it goes ahead of walk-ins who joined after that time).
+    orderAt: timestamp('order_at', { withTimezone: true }).notNull().defaultNow(),
     startedAt: timestamp('started_at', { withTimezone: true }),
     // Set when the entry reaches COMPLETED, CANCELLED or NO_SHOW.
     endedAt: timestamp('ended_at', { withTimezone: true }),
@@ -49,7 +52,7 @@ export const queueEntries = pgTable(
   },
   table => [
     // Loading a barber's lane in queue order.
-    index('queue_entries_barber_lane_idx').on(table.barberId, table.status, table.joinedAt),
+    index('queue_entries_barber_lane_idx').on(table.barberId, table.status, table.orderAt),
     index('queue_entries_shop_status_idx').on(table.shopId, table.status),
     index('queue_entries_customer_id_idx').on(table.customerId),
     // Finding when a barber's last service ended (ETA anchor for an idle barber).

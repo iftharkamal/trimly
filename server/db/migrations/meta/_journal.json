@@ -22,6 +22,20 @@
       "when": 1790765218438,
       "tag": "0002_shop_open_toggle",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1790792415756,
+      "tag": "0003_appointments_and_hours",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1790792435802,
+      "tag": "0004_appointment_overlap_and_order_backfill",
+      "breakpoints": true
     }
   ]
 }

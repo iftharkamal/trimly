@@ -9,10 +9,20 @@ const MINUTE_MS = 60_000
 export interface QueueEntryTiming {
   id: string
   status: QueueEntryStatus
-  joinedAt: Date
+  /**
+   * Queue order key: when the customer joined, or for a checked-in
+   * appointment, its booked time.
+   */
+  orderAt: Date
   startedAt: Date | null
   /** Snapshotted from the selected service when the customer joined. */
   durationMinutes: number
+}
+
+/** Time the barber has promised to someone else, e.g. an upcoming appointment. */
+export interface TimeHold {
+  start: Date
+  end: Date
 }
 
 export interface QueueStateOptions {
@@ -24,6 +34,8 @@ export interface QueueStateOptions {
    * Used when nobody is in the chair, so an early or late finish moves the queue.
    */
   lastServiceEndedAt?: Date | null
+  /** Booked appointments not yet checked in: waiting customers are planned around them. */
+  holds?: readonly TimeHold[]
 }
 
 export interface CurrentServiceState<T> {
@@ -65,9 +77,9 @@ function minutesBetween(from: Date, to: Date): number {
   return (to.getTime() - from.getTime()) / MINUTE_MS
 }
 
-/** Queue order: earliest joinedAt first, id as a stable tiebreak. */
+/** Queue order: earliest orderAt first, id as a stable tiebreak. */
 export function compareQueueOrder(a: QueueEntryTiming, b: QueueEntryTiming): number {
-  const diff = a.joinedAt.getTime() - b.joinedAt.getTime()
+  const diff = a.orderAt.getTime() - b.orderAt.getTime()
   if (diff !== 0) {
     return diff
   }
@@ -114,6 +126,36 @@ export function calculateEstimatedEnd(estimatedStart: Date, durationMinutes: num
 }
 
 /**
+ * Moves a planned start past any held time the service would run into.
+ *
+ * A service fits before a hold only if it ends, plus the buffer, by the
+ * hold's start; otherwise it waits until the hold ends plus the buffer.
+ * Order is kept (first come, first served): a gap too short for this
+ * customer stays unused rather than being given to someone behind them.
+ * With `durationMinutes` 0 this answers "when could anything start next?".
+ */
+export function calculateStartAroundHolds(
+  start: Date,
+  durationMinutes: number,
+  holds: readonly TimeHold[],
+  bufferMinutes: number
+): Date {
+  let candidate = start
+  const ordered = [...holds].sort((a, b) => a.start.getTime() - b.start.getTime())
+  for (const hold of ordered) {
+    if (addMinutes(hold.end, bufferMinutes) <= candidate) {
+      continue
+    }
+    const fitsBefore = addMinutes(candidate, durationMinutes + bufferMinutes) <= hold.start
+    if (fitsBefore) {
+      break
+    }
+    candidate = laterOf(candidate, addMinutes(hold.end, bufferMinutes))
+  }
+  return candidate
+}
+
+/**
  * Expected end of a service already in progress, from its actual start time.
  * An overrunning service is assumed to end `now`, so estimates never fall in the past.
  */
@@ -134,6 +176,7 @@ export function calculateQueueState<T extends QueueEntryTiming>(
   options: QueueStateOptions
 ): QueueState<T> {
   const { now, bufferMinutes } = options
+  const holds = options.holds ?? []
   const inProgress = entries.filter(entry => entry.status === 'IN_PROGRESS')
 
   // Normally at most one (enforced by the database). If there are more,
@@ -155,7 +198,12 @@ export function calculateQueueState<T extends QueueEntryTiming>(
   let previousEnd: Date | null = current?.estimatedEnd ?? options.lastServiceEndedAt ?? null
 
   const waiting = getWaitingInOrder(entries).map((entry, index): WaitingEntryState<T> => {
-    const estimatedStart = calculateEstimatedStart(previousEnd, now, bufferMinutes)
+    const estimatedStart = calculateStartAroundHolds(
+      calculateEstimatedStart(previousEnd, now, bufferMinutes),
+      entry.durationMinutes,
+      holds,
+      bufferMinutes
+    )
     const estimatedEnd = calculateEstimatedEnd(estimatedStart, entry.durationMinutes)
     previousEnd = estimatedEnd
 
@@ -172,7 +220,8 @@ export function calculateQueueState<T extends QueueEntryTiming>(
   return {
     current,
     waiting,
-    nextAvailableAt: calculateEstimatedStart(previousEnd, now, bufferMinutes)
+    // Duration unknown before joining: the earliest moment outside held time.
+    nextAvailableAt: calculateStartAroundHolds(calculateEstimatedStart(previousEnd, now, bufferMinutes), 0, holds, bufferMinutes)
   }
 }
 

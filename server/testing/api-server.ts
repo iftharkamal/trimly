@@ -41,7 +41,8 @@ export default async function setup(project: TestProject) {
   const databaseUrl = getTestDatabaseUrl()
 
   try {
-    execSync('pnpm nuxt build', { stdio: 'pipe' })
+    // Separate build dir: doesn't disturb a running `pnpm dev`.
+    execSync('pnpm nuxt build', { stdio: 'pipe', env: { ...process.env, NUXT_BUILD_DIR: '.nuxt-test' } })
   }
   catch (error) {
     const output = error as { stdout?: Buffer, stderr?: Buffer }

@@ -179,6 +179,7 @@ async function onConfirm() {
             label="Add Customer"
             icon="i-lucide-plus"
             color="neutral"
+            variant="outline"
             size="lg"
             :disabled="!queue"
             @click="addOpen = true"

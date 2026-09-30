@@ -25,7 +25,7 @@ const emit = defineEmits<{
     <div class="flex min-w-0 flex-1 items-center gap-4">
       <span
         class="grid size-10 shrink-0 place-items-center rounded-full text-sm font-semibold tabular-nums"
-        :class="item.position === 1 ? 'bg-primary/10 text-primary' : 'bg-elevated text-toned'"
+        :class="item.position === 1 ? 'bg-inverted text-inverted' : 'bg-elevated text-toned'"
         :aria-label="`Position ${item.position}`"
       >
         {{ item.position }}

@@ -41,7 +41,11 @@ async function onSubmit(event: FormSubmitEvent<z.output<typeof schema>>) {
 </script>
 
 <template>
-  <div class="grid min-h-dvh place-items-center bg-muted/40 px-4">
+  <div class="relative grid min-h-dvh place-items-center px-4">
+    <UColorModeButton
+      size="sm"
+      class="absolute top-3 right-3"
+    />
     <div class="w-full max-w-sm">
       <div class="mb-6 flex items-center justify-center gap-2 text-lg font-semibold text-highlighted">
         <UIcon

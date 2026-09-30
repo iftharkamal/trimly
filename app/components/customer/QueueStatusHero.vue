@@ -41,8 +41,8 @@ const look = computed(() => {
       }
     case 'IN_PROGRESS':
       return {
-        card: 'bg-primary/10 ring-1 ring-primary/30',
-        eyebrow: 'text-primary',
+        card: 'bg-default ring-2 ring-inverted',
+        eyebrow: 'text-highlighted',
         muted: 'text-muted',
         icon: 'i-lucide-scissors',
         eyebrowText: 'In the chair'
@@ -66,7 +66,7 @@ const look = computed(() => {
     default:
       return {
         card: 'bg-default ring-1 ring-default',
-        eyebrow: 'text-primary',
+        eyebrow: 'text-muted',
         muted: 'text-muted',
         icon: 'i-lucide-clock',
         eyebrowText: 'You\'re in the queue'

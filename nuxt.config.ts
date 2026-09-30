@@ -17,6 +17,12 @@ export default defineNuxtConfig({
 
   css: ['~/assets/css/main.css'],
 
+  // Light until the user picks otherwise (remembered per device).
+  colorMode: {
+    preference: 'light',
+    fallback: 'light'
+  },
+
   typescript: {
     strict: true
   }

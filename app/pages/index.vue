@@ -1,6 +1,10 @@
 <template>
-  <UContainer class="py-16">
-    <h1 class="text-3xl font-bold">
+  <UContainer class="relative py-16">
+    <UColorModeButton
+      size="sm"
+      class="absolute top-3 right-3"
+    />
+    <h1 class="text-3xl font-bold tracking-tight text-highlighted">
       Trimly
     </h1>
     <p class="mt-2 text-muted">

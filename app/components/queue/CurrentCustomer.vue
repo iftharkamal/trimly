@@ -29,11 +29,11 @@ const progress = computed(() => {
 <template>
   <UCard
     :ui="{
-      root: current ? 'ring-2 ring-primary/40 shadow-lg shadow-primary/5' : '',
+      root: current ? 'shadow-md' : '',
       body: 'p-5 sm:p-6'
     }"
   >
-    <p class="text-xs font-semibold uppercase tracking-widest text-primary">
+    <p class="text-xs font-semibold uppercase tracking-widest text-muted">
       Currently serving
     </p>
 

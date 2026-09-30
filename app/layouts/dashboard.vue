@@ -10,7 +10,7 @@ async function signOut() {
 </script>
 
 <template>
-  <div class="min-h-dvh bg-muted/40">
+  <div class="min-h-dvh">
     <header class="sticky top-0 z-20 border-b border-default bg-default/85 backdrop-blur">
       <UContainer class="flex h-14 items-center justify-between">
         <NuxtLink
@@ -23,15 +23,18 @@ async function signOut() {
           />
           Trimly
         </NuxtLink>
-        <UButton
-          label="Sign out"
-          icon="i-lucide-log-out"
-          color="neutral"
-          variant="ghost"
-          size="sm"
-          :loading="signingOut"
-          @click="signOut"
-        />
+        <div class="flex items-center gap-1">
+          <UColorModeButton size="sm" />
+          <UButton
+            label="Sign out"
+            icon="i-lucide-log-out"
+            color="neutral"
+            variant="ghost"
+            size="sm"
+            :loading="signingOut"
+            @click="signOut"
+          />
+        </div>
       </UContainer>
     </header>
 

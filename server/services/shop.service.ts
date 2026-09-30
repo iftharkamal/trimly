@@ -89,3 +89,12 @@ export async function setOpeningHours(shopId: string, hours: OpeningHours): Prom
   })
   return getOpeningHours(shopId)
 }
+
+/** Gap the shop keeps between services, in minutes. */
+export async function getServiceBufferMinutes(shopId: string): Promise<number> {
+  const shop = await useDb().query.shops.findFirst({ where: eq(shops.id, shopId), columns: { serviceBufferMinutes: true } })
+  if (!shop) {
+    throw new DomainError('SHOP_NOT_FOUND', 404, 'Shop not found')
+  }
+  return shop.serviceBufferMinutes
+}

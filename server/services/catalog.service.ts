@@ -31,3 +31,15 @@ export async function listActiveServices(shopId: string): Promise<CatalogService
     .where(and(eq(services.shopId, shopId), eq(services.isActive, true)))
     .orderBy(asc(services.priceMinor), asc(services.name))
 }
+
+/** An active service of this shop. */
+export async function getActiveService(shopId: string, serviceId: string): Promise<CatalogService> {
+  const service = await useDb().query.services.findFirst({
+    where: and(eq(services.id, serviceId), eq(services.shopId, shopId), eq(services.isActive, true)),
+    columns: { id: true, name: true, durationMinutes: true, priceMinor: true }
+  })
+  if (!service) {
+    throw new DomainError('SERVICE_NOT_FOUND', 404, 'Service not found or not available')
+  }
+  return service
+}

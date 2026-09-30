@@ -1,34 +1,44 @@
-// Remembers the customer's tracking code per shop on this device, so returning
-// to the shop page can link back to their place. Best effort: storage may be
-// unavailable (private mode, blocked site data).
+// Remembers the customer's codes per shop on this device (their queue place
+// and their booking), so returning to the shop page can link back to them.
+// Best effort: storage may be unavailable (private mode, blocked site data).
 
-function storageKey(shopSlug: string) {
-  return `trimly:queue:${shopSlug}`
+type PlaceKind = 'queue' | 'booking'
+
+function storageKey(kind: PlaceKind, shopSlug: string) {
+  return `trimly:${kind}:${shopSlug}`
 }
 
-export function rememberQueuePlace(shopSlug: string, trackingCode: string) {
+function remember(kind: PlaceKind, shopSlug: string, code: string) {
   try {
-    localStorage.setItem(storageKey(shopSlug), trackingCode)
+    localStorage.setItem(storageKey(kind, shopSlug), code)
   }
   catch {
-    // Not critical: the customer still has the status page open.
+    // Not critical: the customer still has the page open.
   }
 }
 
-export function recallQueuePlace(shopSlug: string): string | null {
+function recall(kind: PlaceKind, shopSlug: string): string | null {
   try {
-    return localStorage.getItem(storageKey(shopSlug))
+    return localStorage.getItem(storageKey(kind, shopSlug))
   }
   catch {
     return null
   }
 }
 
-export function forgetQueuePlace(shopSlug: string) {
+function forget(kind: PlaceKind, shopSlug: string) {
   try {
-    localStorage.removeItem(storageKey(shopSlug))
+    localStorage.removeItem(storageKey(kind, shopSlug))
   }
   catch {
     // Nothing to clean up.
   }
 }
+
+export const rememberQueuePlace = (shopSlug: string, code: string) => remember('queue', shopSlug, code)
+export const recallQueuePlace = (shopSlug: string) => recall('queue', shopSlug)
+export const forgetQueuePlace = (shopSlug: string) => forget('queue', shopSlug)
+
+export const rememberBooking = (shopSlug: string, code: string) => remember('booking', shopSlug, code)
+export const recallBooking = (shopSlug: string) => recall('booking', shopSlug)
+export const forgetBooking = (shopSlug: string) => forget('booking', shopSlug)

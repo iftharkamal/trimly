@@ -38,7 +38,7 @@ request schemas are in [`shared/schemas/queue.ts`](../shared/schemas/queue.ts).
 | 401 | `UNAUTHENTICATED` — no valid session |
 | 403 | `FORBIDDEN` — signed in, but the account doesn't manage a shop |
 | 404 | `SHOP_NOT_FOUND`, `SERVICE_NOT_FOUND`, `BARBER_NOT_FOUND`, `ENTRY_NOT_FOUND` |
-| 409 | `ALREADY_IN_QUEUE`, `BARBER_BUSY`, `INVALID_TRANSITION`, `NO_BARBER_AVAILABLE`, `SHOP_CLOSED` |
+| 409 | `ALREADY_IN_QUEUE`, `BARBER_BUSY`, `INVALID_TRANSITION`, `NO_BARBER_AVAILABLE`, `SHOP_CLOSED`, `SLOT_TAKEN`, `SLOT_UNAVAILABLE`, `ALREADY_BOOKED` |
 | 500 | `INTERNAL_ERROR` |
 
 ## `GET /api/shops/:shopId/queue`
@@ -347,7 +347,7 @@ Weekly hours for the shop, in shop time. **Auth:** owner only.
 
 - `weekday`: ISO, 1 = Monday … 7 = Sunday. `PUT` must list all 7 days exactly once and replaces the schedule.
 - Each day has 0–2 ranges (0 = closed) in 24-hour `HH:MM`, in order and not overlapping.
-- Used for online booking availability (coming). The manual Open/Closed switch still controls online queue joins.
+- Used for online booking availability. The manual Open/Closed switch still controls online queue joins.
 
 **Errors:** 400 `VALIDATION_ERROR` · 401 · 403.
 
@@ -389,6 +389,71 @@ joins the queue **ordered by their booked time** (ahead of walk-ins who joined a
 **Errors:** 400 `VALIDATION_ERROR` / `INVALID_TIME` (not in the future) · 401 · 403 ·
 404 `APPOINTMENT_NOT_FOUND` / `SERVICE_NOT_FOUND` / `BARBER_NOT_FOUND` ·
 409 `SLOT_TAKEN` / `ALREADY_BOOKED` / `INVALID_TRANSITION` / `ALREADY_IN_QUEUE`.
+
+## Online booking (customers)
+
+Customers book without an account. Offered times:
+
+- start every **15 minutes** from opening, and the whole service must fit inside an opening range;
+- need at least **30 minutes' notice**, and run from today up to **14 days** (today + 13);
+- keep clear of the barber's other bookings by the shop's buffer. Without `barberId`, a
+  time is offered when **any** barber is free; the barber is chosen when booking.
+
+Walk-ins don't limit the offered times: a booking holds its time in the queue and walk-ins
+are planned around it. The Open/Closed switch doesn't affect bookings.
+
+### `GET /api/shops/:shopId/availability?serviceId=…[&barberId=…]`
+
+Public. **200:**
+
+```json
+{ "data": {
+  "timeZone": "Asia/Kolkata",
+  "days": [
+    { "date": "2026-10-01", "isOpen": true, "slots": [{ "startsAt": "2026-10-01T03:30:00.000Z" }] },
+    { "date": "2026-10-04", "isOpen": false, "slots": [] }
+  ]
+} }
+```
+
+**Errors:** 400 · 404 `SHOP_NOT_FOUND` / `SERVICE_NOT_FOUND` / `BARBER_NOT_FOUND`.
+
+### `POST /api/shops/:shopId/appointments`
+
+Public. Books one of the offered times; the server re-checks it, so only offered times can be booked.
+
+```json
+{ "customer": { "name": "Arjun", "phone": "+91 98765 43210" }, "serviceId": "…", "barberId": null, "startsAt": "2026-10-01T03:30:00.000Z" }
+```
+
+- `phone` is **required** (international format). The body is strict.
+- **201:** `{ "trackingCode": "…", "booking": BookingDto }`. `trackingCode` is the secret for
+  the booking link `/booking/:trackingCode` and is only returned here.
+
+**Errors:** 400 `VALIDATION_ERROR` · 404 · 409 `SLOT_UNAVAILABLE` (not offered or just taken) /
+`SLOT_TAKEN` / `ALREADY_BOOKED` (one upcoming booking per phone number per shop).
+
+### `GET /api/bookings/:trackingCode` · `POST /api/bookings/:trackingCode/cancel`
+
+Public: the code is the credential. `BookingDto`:
+
+```json
+{
+  "status": "BOOKED", "startsAt": "…", "endsAt": "…",
+  "serviceName": "Haircut", "durationMinutes": 20, "priceMinor": 15000,
+  "barberName": "Faisal", "customerName": "Arjun",
+  "shop": { "name": "Faisal Barber", "slug": "faisal-barber", "timezone": "Asia/Kolkata", "currency": "INR" },
+  "queueTrackingCode": null,
+  "canCancel": true
+}
+```
+
+- `canCancel`: booked and not started yet. Cancel returns the updated `BookingDto`.
+- `queueTrackingCode`: set once the barber checks the customer in; their live queue status is
+  `/queue/:queueTrackingCode`.
+
+**Errors:** 400 invalid code · 404 `APPOINTMENT_NOT_FOUND` · 409 `INVALID_TRANSITION` (cancel
+after it started, or not booked).
 
 ## Tests
 

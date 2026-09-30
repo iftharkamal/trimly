@@ -727,3 +727,122 @@ describe('appointments: /api/dashboard/appointments', () => {
     expectError(await bookVia(booking(inMinutes(60)), outsider.cookie), 403, 'FORBIDDEN')
   })
 })
+
+describe('online booking: availability, booking and the booking link', () => {
+  async function openAllDay() {
+    const days = [1, 2, 3, 4, 5, 6, 7].map(weekday => ({ weekday, ranges: [{ opens: '00:00', closes: '23:59' }] }))
+    await request('PUT', '/api/dashboard/hours', { body: { days }, cookie: owner.cookie })
+  }
+
+  async function firstSlot(serviceId = shop.services.haircut): Promise<string> {
+    const availability = await request('GET', `/api/shops/${shop.shopId}/availability?serviceId=${serviceId}`)
+    const slot = (availability.json.data.days as { slots: { startsAt: string }[] }[]).flatMap(day => day.slots)[0]
+    if (!slot) {
+      throw new Error('No slot offered')
+    }
+    return slot.startsAt
+  }
+
+  function bookOnline(startsAt: string, phone = '+919990000400', extra: object = {}) {
+    return request('POST', `/api/shops/${shop.shopId}/appointments`, {
+      body: { customer: { name: 'Online', phone }, serviceId: shop.services.haircut, startsAt, ...extra }
+    })
+  }
+
+  it('offers 14 days of slots without sign-in', async () => {
+    await openAllDay()
+
+    const response = await request('GET', `/api/shops/${shop.shopId}/availability?serviceId=${shop.services.haircut}`)
+
+    expect(response.status).toBe(200)
+    expect(response.json.data.timeZone).toBe('Asia/Kolkata')
+    expect(response.json.data.days).toHaveLength(14)
+    const slots = (response.json.data.days as { slots: { startsAt: string }[] }[]).flatMap(day => day.slots)
+    expect(slots.length).toBeGreaterThan(0)
+    // At least 30 minutes' notice.
+    expect(new Date(slots[0]!.startsAt).getTime()).toBeGreaterThanOrEqual(Date.now() + 29 * 60_000)
+  })
+
+  it('offers nothing when the shop has no opening hours', async () => {
+    const response = await request('GET', `/api/shops/${shop.shopId}/availability?serviceId=${shop.services.haircut}`)
+    expect((response.json.data.days as { slots: unknown[] }[]).every(day => day.slots.length === 0)).toBe(true)
+  })
+
+  it('books an offered slot and returns the private booking link code', async () => {
+    await openAllDay()
+    const startsAt = await firstSlot()
+
+    const response = await bookOnline(startsAt)
+
+    expect(response.status).toBe(201)
+    expect(response.json.data.trackingCode).toMatch(/^[0-9a-f-]{36}$/)
+    expect(response.json.data.booking).toMatchObject({
+      status: 'BOOKED',
+      startsAt,
+      serviceName: 'Haircut',
+      customerName: 'Online',
+      barberName: 'Faisal',
+      canCancel: true,
+      queueTrackingCode: null,
+      shop: { slug: 'test-barber' }
+    })
+    // Shown to the barber as an online booking.
+    const list = await request('GET', `/api/dashboard/appointments?from=${startsAt.slice(0, 10)}&to=${new Date(Date.parse(startsAt) + 2 * 86_400_000).toISOString().slice(0, 10)}`, { cookie: owner.cookie })
+    expect(list.json.data.find((item: { startsAt: string }) => item.startsAt === startsAt)).toMatchObject({ source: 'ONLINE' })
+  })
+
+  it('refuses times that were not offered or are taken (409)', async () => {
+    await openAllDay()
+    const startsAt = await firstSlot()
+    await bookOnline(startsAt)
+
+    expectError(await bookOnline(startsAt, '+919990000401'), 409, 'SLOT_UNAVAILABLE')
+    expectError(await bookOnline(new Date(Date.now() + 40 * 86_400_000).toISOString(), '+919990000402'), 409, 'SLOT_UNAVAILABLE')
+    expectError(await bookOnline(new Date(Date.parse(startsAt) + 7 * 60_000).toISOString(), '+919990000403'), 409, 'SLOT_UNAVAILABLE')
+  })
+
+  it('requires a phone number and a strict body (400)', async () => {
+    await openAllDay()
+    const startsAt = await firstSlot()
+
+    expectError(await request('POST', `/api/shops/${shop.shopId}/appointments`, {
+      body: { customer: { name: 'No phone' }, serviceId: shop.services.haircut, startsAt }
+    }), 400, 'VALIDATION_ERROR')
+    expectError(await bookOnline(startsAt, '+919990000404', { source: 'BARBER' }), 400, 'VALIDATION_ERROR')
+    expectError(await request('GET', `/api/shops/${shop.shopId}/availability?serviceId=nope`), 400, 'VALIDATION_ERROR')
+  })
+
+  it('shows and cancels the booking by its link, only while it can be cancelled', async () => {
+    await openAllDay()
+    const booked = await bookOnline(await firstSlot())
+    const code = booked.json.data.trackingCode as string
+
+    const view = await request('GET', `/api/bookings/${code}`)
+    expect(view.status).toBe(200)
+    expect(view.json.data).toMatchObject({ status: 'BOOKED', canCancel: true })
+
+    const cancelled = await request('POST', `/api/bookings/${code}/cancel`)
+    expect(cancelled.json.data).toMatchObject({ status: 'CANCELLED', canCancel: false })
+    expectError(await request('POST', `/api/bookings/${code}/cancel`), 409, 'INVALID_TRANSITION')
+  })
+
+  it('links to the live queue after the barber checks the customer in', async () => {
+    await openAllDay()
+    const booked = await bookOnline(await firstSlot())
+    const code = booked.json.data.trackingCode as string
+    const list = await request('GET', `/api/dashboard/appointments?from=${new Date(Date.now() - 86_400_000).toISOString().slice(0, 10)}&to=${new Date(Date.now() + 3 * 86_400_000).toISOString().slice(0, 10)}`, { cookie: owner.cookie })
+    const appointmentId = (list.json.data as { id: string, source: string }[]).find(item => item.source === 'ONLINE')!.id
+
+    await request('POST', `/api/dashboard/appointments/${appointmentId}/check-in`, { cookie: owner.cookie })
+
+    const view = await request('GET', `/api/bookings/${code}`)
+    expect(view.json.data.status).toBe('CHECKED_IN')
+    const queueCode = view.json.data.queueTrackingCode as string
+    expect((await request('GET', `/api/track/${queueCode}`)).json.data).toMatchObject({ customerName: 'Online', status: 'WAITING' })
+  })
+
+  it('validates the code (400) and hides unknown codes (404)', async () => {
+    expectError(await request('GET', '/api/bookings/not-a-code'), 400, 'VALIDATION_ERROR')
+    expectError(await request('GET', `/api/bookings/${randomUUID()}`), 404, 'APPOINTMENT_NOT_FOUND')
+  })
+})

@@ -44,6 +44,8 @@ export interface CreateAppointmentInput {
   shopId: string
   /** Omit for "any barber": the first active barber free at that time. */
   barberId?: string | null
+  /** With "any barber", only try these (e.g. the barbers free in an offered slot). */
+  candidateBarberIds?: readonly string[]
   customer: CustomerInput
   serviceId: string
   startsAt: Date
@@ -152,7 +154,9 @@ export async function createAppointment(input: CreateAppointmentInput, now = new
   }
 
   const endsAt = new Date(input.startsAt.getTime() + service.durationMinutes * MINUTE_MS)
-  const candidates = await activeBarberIds(input.shopId, input.barberId)
+  const candidates = !input.barberId && input.candidateBarberIds
+    ? input.candidateBarberIds
+    : await activeBarberIds(input.shopId, input.barberId)
 
   // "Any barber": try each active barber until one is free at that time.
   for (const barberId of candidates) {
@@ -277,4 +281,54 @@ export async function markCheckedIn(tx: Transaction, appointmentId: string, queu
     .update(appointments)
     .set({ status: 'CHECKED_IN', queueEntryId, checkedInAt: sql`now()` })
     .where(eq(appointments.id, appointmentId))
+}
+
+/** Active (booked or checked-in) bookings per barber overlapping [from, to). */
+export async function getBusyByBarber(shopId: string, from: Date, to: Date): Promise<Map<string, TimeHold[]>> {
+  const rows = await useDb()
+    .select({ barberId: appointments.barberId, start: appointments.startsAt, end: appointments.endsAt })
+    .from(appointments)
+    .where(and(
+      eq(appointments.shopId, shopId),
+      inArray(appointments.status, ['BOOKED', 'CHECKED_IN']),
+      lt(appointments.startsAt, to),
+      gt(appointments.endsAt, from)
+    ))
+
+  const busy = new Map<string, TimeHold[]>()
+  for (const { barberId, start, end } of rows) {
+    busy.set(barberId, [...(busy.get(barberId) ?? []), { start, end }])
+  }
+  return busy
+}
+
+/** An appointment by its booking-link code (the customer's view). */
+export async function getAppointmentByTrackingCode(trackingCode: string): Promise<AppointmentView> {
+  const [row] = await selectViews(useDb()).where(eq(appointments.trackingCode, trackingCode))
+  if (!row) {
+    throw new DomainError('APPOINTMENT_NOT_FOUND', 404, 'Booking not found')
+  }
+  return toView(row)
+}
+
+/** The customer cancels through their booking link: only while booked and before it starts. */
+export async function cancelByTrackingCode(trackingCode: string, now = new Date()): Promise<AppointmentView> {
+  const updated = await useDb()
+    .update(appointments)
+    .set({ status: 'CANCELLED', endedAt: sql`now()` })
+    .where(and(
+      eq(appointments.trackingCode, trackingCode),
+      eq(appointments.status, 'BOOKED'),
+      gt(appointments.startsAt, now)
+    ))
+    .returning({ id: appointments.id })
+
+  if (updated.length === 0) {
+    const existing = await getAppointmentByTrackingCode(trackingCode)
+    const reason = existing.status === 'BOOKED'
+      ? 'This appointment has already started'
+      : 'This appointment can no longer be cancelled'
+    throw new DomainError('INVALID_TRANSITION', 409, reason)
+  }
+  return getAppointmentByTrackingCode(trackingCode)
 }

@@ -13,6 +13,7 @@ export type DomainErrorCode =
   | 'SLOT_TAKEN'
   | 'ALREADY_BOOKED'
   | 'INVALID_TIME'
+  | 'SLOT_UNAVAILABLE'
 
 /**
  * An expected business-rule failure. Services throw it without knowing about

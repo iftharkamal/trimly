@@ -39,3 +39,8 @@ export type AppointmentStatus = (typeof APPOINTMENT_STATUSES)[number]
 // Who made the booking: the customer online, or the barber from the dashboard.
 export const BOOKING_SOURCES = ['ONLINE', 'BARBER'] as const
 export type BookingSource = (typeof BOOKING_SOURCES)[number]
+
+// Online booking rules (shop time).
+export const BOOKING_WINDOW_DAYS = 14
+export const BOOKING_NOTICE_MINUTES = 30
+export const SLOT_STEP_MINUTES = 15

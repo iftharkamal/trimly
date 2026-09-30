@@ -582,3 +582,12 @@ export async function leaveQueue(trackingCode: string): Promise<QueueTracking> {
 
   return getTracking(trackingCode)
 }
+
+/** The customer's queue tracking code for an entry (null if it doesn't exist). */
+export async function getTrackingCodeForEntry(entryId: string): Promise<string | null> {
+  const entry = await useDb().query.queueEntries.findFirst({
+    where: eq(queueEntries.id, entryId),
+    columns: { trackingCode: true }
+  })
+  return entry?.trackingCode ?? null
+}

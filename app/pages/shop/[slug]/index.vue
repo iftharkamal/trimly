@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { JoinQueueBody } from '#shared/schemas/queue'
 import type { ServiceDto } from '#shared/types/dashboard'
+import type { BookingDto } from '#shared/types/booking'
 import type { QueueTrackingDto } from '#shared/types/queue'
 
 definePageMeta({ layout: 'customer' })
@@ -81,6 +82,44 @@ onMounted(async () => {
     forgetQueuePlace(slug.value)
   }
 })
+
+// An upcoming booking this device made at this shop (client only).
+const activeBooking = ref<{ code: string, booking: BookingDto } | null>(null)
+
+onMounted(async () => {
+  const code = recallBooking(slug.value)
+  if (!code) {
+    return
+  }
+  try {
+    const { data } = await $fetch<{ data: BookingDto }>(`/api/bookings/${code}`)
+    if (data.status === 'BOOKED' || data.status === 'CHECKED_IN') {
+      activeBooking.value = { code, booking: data }
+    }
+    else {
+      forgetBooking(slug.value)
+    }
+  }
+  catch {
+    forgetBooking(slug.value)
+  }
+})
+
+const activeBookingTitle = computed(() => {
+  const value = activeBooking.value
+  if (!value) {
+    return ''
+  }
+  const when = new Intl.DateTimeFormat('en-GB', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    hour: 'numeric',
+    minute: '2-digit',
+    timeZone: value.booking.shop.timezone
+  }).format(new Date(value.booking.startsAt))
+  return `Your appointment: ${when}`
+})
 </script>
 
 <template>
@@ -129,7 +168,7 @@ onMounted(async () => {
         />
       </div>
       <p class="mt-1 text-muted">
-        Join the queue online and arrive when it's your turn.
+        Join the queue now, or book a time that suits you.
       </p>
     </header>
 
@@ -142,6 +181,17 @@ onMounted(async () => {
       :title="activePlace.tracking.position ? `You're #${activePlace.tracking.position} in the queue` : 'You\'re in the queue'"
       description="Keep an eye on your live place in line."
       :actions="[{ label: 'View my place', color: 'primary', to: `/queue/${activePlace.code}` }]"
+    />
+
+    <!-- Upcoming booking on this device -->
+    <UAlert
+      v-if="activeBooking"
+      color="neutral"
+      variant="subtle"
+      icon="i-lucide-calendar-check"
+      :title="activeBookingTitle"
+      :description="`${activeBooking.booking.serviceName} with ${activeBooking.booking.barberName}`"
+      :actions="[{ label: 'View booking', color: 'neutral', variant: 'outline', to: `/booking/${activeBooking.code}` }]"
     />
 
     <!-- Live queue -->
@@ -211,15 +261,27 @@ onMounted(async () => {
 
     <!-- Join: fixed to the bottom on phones, where thumbs are -->
     <div class="fixed inset-x-0 bottom-0 z-10 border-t border-default bg-default/90 backdrop-blur">
-      <div class="mx-auto w-full max-w-md px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+      <div class="mx-auto grid w-full max-w-md grid-cols-2 gap-2 px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
         <UButton
-          :label="canJoin ? 'Join Queue' : (shop.isOpen ? 'Queue unavailable' : 'Closed for online joining')"
+          :label="canJoin ? 'Join Queue' : (shop.isOpen ? 'Queue unavailable' : 'Queue closed')"
           :icon="canJoin ? 'i-lucide-user-plus' : undefined"
           size="xl"
           block
           :disabled="!canJoin"
           class="min-h-14 text-base font-semibold"
           @click="openJoin()"
+        />
+        <!-- Booking is for later times, so it doesn't depend on today's Open/Closed switch. -->
+        <UButton
+          :to="`/shop/${shop.slug}/book`"
+          label="Book a time"
+          icon="i-lucide-calendar-plus"
+          color="neutral"
+          variant="outline"
+          size="xl"
+          block
+          :disabled="!services?.length"
+          class="min-h-14 text-base font-semibold"
         />
       </div>
     </div>

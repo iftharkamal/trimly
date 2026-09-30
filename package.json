@@ -11,6 +11,7 @@
     "typecheck": "nuxt typecheck",
     "test": "vitest run --project unit",
     "test:integration": "vitest run --project integration",
+    "test:api": "vitest run --project api",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:seed": "jiti server/db/seed.ts",

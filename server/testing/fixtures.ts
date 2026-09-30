@@ -11,6 +11,13 @@ export async function resetDatabase() {
   `)
 }
 
+/** Empties the shop and queue tables but keeps users and sessions. */
+export async function resetShopData() {
+  await useDb().execute(sql`
+    truncate table payments, queue_entries, customers, services, barbers, shops cascade
+  `)
+}
+
 export interface ShopFixture {
   shopId: string
   barberId: string
@@ -22,20 +29,29 @@ export interface ShopFixture {
   }
 }
 
-/** A shop shaped like the seed: one barber and the three standard services. */
-export async function createShopFixture({ bufferMinutes = 5 } = {}): Promise<ShopFixture> {
+/**
+ * A shop shaped like the seed: one barber and the three standard services.
+ * Creates a bare owner user unless `ownerUserId` (e.g. a signed-up user) is given.
+ */
+export async function createShopFixture(
+  { bufferMinutes = 5, ownerUserId, slug = 'test-barber' }: { bufferMinutes?: number, ownerUserId?: string, slug?: string } = {}
+): Promise<ShopFixture> {
   const db = useDb()
 
-  const [owner] = await db
-    .insert(user)
-    .values({ id: 'test-owner', name: 'Test Owner', email: 'owner@trimly.test' })
-    .returning({ id: user.id })
+  if (!ownerUserId) {
+    const [owner] = await db
+      .insert(user)
+      .values({ id: 'test-owner', name: 'Test Owner', email: 'owner@trimly.test' })
+      .returning({ id: user.id })
+    ownerUserId = owner!.id
+  }
+
   const [shop] = await db
     .insert(shops)
     .values({
-      ownerUserId: owner!.id,
+      ownerUserId,
       name: 'Test Barber',
-      slug: 'test-barber',
+      slug,
       timezone: 'Asia/Kolkata',
       currency: 'INR',
       serviceBufferMinutes: bufferMinutes

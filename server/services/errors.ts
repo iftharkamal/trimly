@@ -4,6 +4,7 @@ export type DomainErrorCode =
   | 'SERVICE_NOT_FOUND'
   | 'NO_BARBER_AVAILABLE'
   | 'ENTRY_NOT_FOUND'
+  | 'PHONE_REQUIRED'
   | 'ALREADY_IN_QUEUE'
   | 'BARBER_BUSY'
   | 'INVALID_TRANSITION'

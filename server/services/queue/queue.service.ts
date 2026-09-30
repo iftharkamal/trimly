@@ -293,6 +293,16 @@ async function resolveBarberId(shopId: string, barberId: string | null | undefin
 export async function addCustomer(input: AddCustomerInput): Promise<AddedQueueEntry> {
   const db = useDb()
 
+  // Online customers are identified by phone; only a barber can add someone without one.
+  if (input.source === 'ONLINE' && !input.customer.phone) {
+    throw new DomainError('PHONE_REQUIRED', 400, 'A phone number is required to join the queue')
+  }
+
+  const shop = await db.query.shops.findFirst({ where: eq(shops.id, input.shopId), columns: { id: true } })
+  if (!shop) {
+    throw new DomainError('SHOP_NOT_FOUND', 404, 'Shop not found')
+  }
+
   const service = await db.query.services.findFirst({
     where: and(eq(services.id, input.serviceId), eq(services.shopId, input.shopId), eq(services.isActive, true)),
     columns: { id: true, name: true, durationMinutes: true, priceMinor: true }

@@ -4,9 +4,10 @@
 import { and, eq, inArray, sql } from 'drizzle-orm'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { useDb } from '../../db'
-import { customers, queueEntries } from '../../db/schema'
+import { customers, payments, queueEntries } from '../../db/schema'
 import { createShopFixture, resetDatabase, type ShopFixture } from '../../testing/fixtures'
 import { DomainError, type DomainErrorCode } from '../errors'
+import { getTodayRevenue } from '../payment.service'
 import {
   addCustomer,
   cancelEntry,
@@ -287,9 +288,9 @@ describe('getTodayStats', () => {
     joinedAt: Date,
     endedAt: Date | null,
     priceMinor: number
-  ) {
+  ): Promise<string> {
     const [customer] = await useDb().insert(customers).values({ name: 'Stats' }).returning({ id: customers.id })
-    await useDb().insert(queueEntries).values({
+    const [entry] = await useDb().insert(queueEntries).values({
       shopId: shop.shopId,
       barberId: shop.barberId,
       customerId: customer!.id,
@@ -302,7 +303,8 @@ describe('getTodayStats', () => {
       joinedAt,
       startedAt: status === 'COMPLETED' || status === 'IN_PROGRESS' ? joinedAt : null,
       endedAt
-    })
+    }).returning({ id: queueEntries.id })
+    return entry!.id
   }
 
   it('counts only today in the shop’s timezone', async () => {
@@ -317,18 +319,124 @@ describe('getTodayStats', () => {
     await insertEntry('CANCELLED', afterMidnight, afterMidnight, 15000)
     await insertEntry('NO_SHOW', afterMidnight, afterMidnight, 15000)
 
-    expect(await getTodayStats(shop.shopId, now)).toEqual({
-      customers: 3,
-      servicesCompleted: 2,
-      completedRevenueMinor: 32000
-    })
+    expect(await getTodayStats(shop.shopId, now)).toEqual({ customers: 3, servicesCompleted: 2 })
   })
 
   it('returns zeros for a quiet day', async () => {
-    expect(await getTodayStats(shop.shopId, now)).toEqual({ customers: 0, servicesCompleted: 0, completedRevenueMinor: 0 })
+    expect(await getTodayStats(shop.shopId, now)).toEqual({ customers: 0, servicesCompleted: 0 })
   })
 
   it('rejects an unknown shop', async () => {
     await expectDomainError(getTodayStats('00000000-0000-4000-8000-000000000000', now), 'SHOP_NOT_FOUND')
+  })
+
+  describe('getTodayRevenue', () => {
+    async function insertPayment(
+      entryId: string,
+      amountMinor: number,
+      status: 'PAID' | 'PENDING' | 'REFUNDED',
+      paidAt: Date | null
+    ) {
+      await useDb().insert(payments).values({
+        queueEntryId: entryId,
+        amountMinor,
+        status,
+        method: status === 'PENDING' ? null : 'CASH',
+        paidAt,
+        refundedAt: status === 'REFUNDED' ? afterMidnight : null
+      })
+    }
+
+    it('sums payments received today in the shop’s timezone', async () => {
+      // Paid yesterday (local): not today's revenue.
+      await insertPayment(await insertEntry('COMPLETED', beforeMidnight, beforeMidnight, 15000), 15000, 'PAID', beforeMidnight)
+      // Paid today, including a discounted amount.
+      await insertPayment(await insertEntry('COMPLETED', afterMidnight, afterMidnight, 15000), 15000, 'PAID', afterMidnight)
+      await insertPayment(await insertEntry('COMPLETED', afterMidnight, afterMidnight, 22000), 20000, 'PAID', afterMidnight)
+      // Not money received.
+      await insertPayment(await insertEntry('COMPLETED', afterMidnight, afterMidnight, 10000), 10000, 'PENDING', null)
+      await insertPayment(await insertEntry('COMPLETED', afterMidnight, afterMidnight, 10000), 10000, 'REFUNDED', afterMidnight)
+      // Completed without payment.
+      await insertEntry('COMPLETED', afterMidnight, afterMidnight, 15000)
+
+      expect(await getTodayRevenue(shop.shopId, now)).toBe(35000)
+    })
+
+    it('only counts this shop', async () => {
+      const other = await createShopFixture({ slug: 'other-shop' })
+      const [customer] = await useDb().insert(customers).values({ name: 'Other' }).returning({ id: customers.id })
+      const [entry] = await useDb().insert(queueEntries).values({
+        shopId: other.shopId,
+        barberId: other.barberId,
+        customerId: customer!.id,
+        serviceId: other.services.haircut,
+        source: 'WALK_IN',
+        status: 'COMPLETED',
+        serviceName: 'Haircut',
+        durationMinutes: 20,
+        priceMinor: 15000,
+        joinedAt: afterMidnight,
+        startedAt: afterMidnight,
+        endedAt: afterMidnight
+      }).returning({ id: queueEntries.id })
+      await insertPayment(entry!.id, 15000, 'PAID', afterMidnight)
+
+      expect(await getTodayRevenue(shop.shopId, now)).toBe(0)
+      expect(await getTodayRevenue(other.shopId, now)).toBe(15000)
+    })
+  })
+})
+
+describe('completeService with payment', () => {
+  async function inChair(name: string) {
+    const entry = await join(name, shop.services.haircut)
+    await startService(shop.shopId, entry.id)
+    return entry.id
+  }
+
+  async function paymentFor(entryId: string) {
+    return useDb().query.payments.findFirst({ where: eq(payments.queueEntryId, entryId) })
+  }
+
+  it('completes and records the payment together', async () => {
+    const entryId = await inChair('A')
+
+    await completeService(shop.shopId, entryId, { method: 'UPI', amountMinor: 12000 })
+
+    expect((await readEntry(entryId)).status).toBe('COMPLETED')
+    const payment = await paymentFor(entryId)
+    expect(payment).toMatchObject({ status: 'PAID', method: 'UPI', amountMinor: 12000, refundedAt: null })
+    expect(payment?.paidAt).toBeInstanceOf(Date)
+    expect(await getTodayRevenue(shop.shopId)).toBe(12000)
+  })
+
+  it('records no payment when completed without one', async () => {
+    const entryId = await inChair('A')
+
+    await completeService(shop.shopId, entryId, null)
+
+    expect((await readEntry(entryId)).status).toBe('COMPLETED')
+    expect(await paymentFor(entryId)).toBeUndefined()
+    expect(await getTodayRevenue(shop.shopId)).toBe(0)
+  })
+
+  it('records nothing when the service cannot be completed', async () => {
+    const waiting = await join('A', shop.services.haircut)
+
+    await expectDomainError(completeService(shop.shopId, waiting.id, { method: 'CASH', amountMinor: 15000 }), 'INVALID_TRANSITION')
+
+    expect((await readEntry(waiting.id)).status).toBe('WAITING')
+    expect(await paymentFor(waiting.id)).toBeUndefined()
+  })
+
+  it('never records a second payment for a repeated tap', async () => {
+    const entryId = await inChair('A')
+
+    await completeService(shop.shopId, entryId, { method: 'CASH', amountMinor: 15000 })
+    await expectDomainError(completeService(shop.shopId, entryId, { method: 'CARD', amountMinor: 15000 }), 'INVALID_TRANSITION')
+
+    const rows = await useDb().select().from(payments).where(eq(payments.queueEntryId, entryId))
+    expect(rows).toHaveLength(1)
+    expect(rows[0]?.method).toBe('CASH')
   })
 })

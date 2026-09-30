@@ -10,8 +10,8 @@ export interface DashboardDto {
     /** Joined today and not cancelled or marked no-show. */
     customers: number
     servicesCompleted: number
-    /** Prices of services completed today (stands in for revenue until payments exist). */
-    completedRevenueMinor: number
+    /** Payments received today, in minor units. */
+    revenueMinor: number
   }
 }
 

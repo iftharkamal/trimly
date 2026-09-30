@@ -3,6 +3,7 @@
 // ETAs are never stored; every read (and every mutation's result) recalculates them.
 import { and, asc, desc, eq, gte, inArray, isNotNull, lt, or, sql } from 'drizzle-orm'
 import type { QueueEntrySource, QueueEntryStatus, TrackingState } from '../../../shared/constants'
+import type { PaymentInput } from '../../../shared/schemas/payment'
 import { useDb, type Transaction } from '../../db'
 import { isUniqueViolation } from '../../db/errors'
 import {
@@ -14,7 +15,9 @@ import {
   services,
   shops
 } from '../../db/schema'
+import { localDayRange } from '../day-range'
 import { DomainError } from '../errors'
+import { recordPayment } from '../payment.service'
 import {
   calculateJoinPreview,
   calculateQueueState,
@@ -194,8 +197,6 @@ export interface TodayStats {
   /** Joined today and not cancelled or marked no-show. */
   customers: number
   servicesCompleted: number
-  /** Sum of the prices of services completed today. Stands in for revenue until payments exist. */
-  completedRevenueMinor: number
 }
 
 /** Today's numbers, where "today" is the current calendar day in the shop's timezone. */
@@ -207,23 +208,20 @@ export async function getTodayStats(shopId: string, now = new Date()): Promise<T
     throw new DomainError('SHOP_NOT_FOUND', 404, 'Shop not found')
   }
 
-  // Local midnight in the shop's timezone, as an absolute timestamp.
-  const dayStart = sql`(date_trunc('day', ${now.toISOString()}::timestamptz at time zone ${shop.timezone}) at time zone ${shop.timezone})`
-  const dayEnd = sql`(${dayStart} + interval '1 day')`
-  const joinedToday = and(gte(queueEntries.joinedAt, dayStart), lt(queueEntries.joinedAt, dayEnd))
-  const endedToday = and(gte(queueEntries.endedAt, dayStart), lt(queueEntries.endedAt, dayEnd))
+  const today = localDayRange(shop.timezone, now)
+  const joinedToday = and(gte(queueEntries.joinedAt, today.start), lt(queueEntries.joinedAt, today.end))
+  const endedToday = and(gte(queueEntries.endedAt, today.start), lt(queueEntries.endedAt, today.end))
   const completedToday = and(eq(queueEntries.status, 'COMPLETED'), endedToday)
 
   const [row] = await db
     .select({
       customers: sql<number>`count(*) filter (where ${joinedToday} and ${queueEntries.status} not in ('CANCELLED', 'NO_SHOW'))`.mapWith(Number),
-      servicesCompleted: sql<number>`count(*) filter (where ${completedToday})`.mapWith(Number),
-      completedRevenueMinor: sql<number>`coalesce(sum(${queueEntries.priceMinor}) filter (where ${completedToday}), 0)`.mapWith(Number)
+      servicesCompleted: sql<number>`count(*) filter (where ${completedToday})`.mapWith(Number)
     })
     .from(queueEntries)
     .where(and(eq(queueEntries.shopId, shopId), or(joinedToday, endedToday)))
 
-  return row ?? { customers: 0, servicesCompleted: 0, completedRevenueMinor: 0 }
+  return row ?? { customers: 0, servicesCompleted: 0 }
 }
 
 /** One entry's live status by its tracking code (the customer's view). */
@@ -403,23 +401,36 @@ export async function addCustomer(input: AddCustomerInput): Promise<AddedQueueEn
 /**
  * Moves an entry to `to` only if its current status allows it. The status guard
  * lives in the UPDATE itself, so double-taps and concurrent devices can't both win.
- * Returns the recalculated queue.
+ * `afterTransition` runs in the same transaction (e.g. recording a payment), so
+ * either both happen or neither does. Returns the recalculated queue.
  */
-async function transitionEntry(shopId: string, entryId: string, to: QueueEntryStatus): Promise<ShopQueue> {
+async function transitionEntry(
+  shopId: string,
+  entryId: string,
+  to: QueueEntryStatus,
+  afterTransition?: (tx: Transaction) => Promise<void>
+): Promise<ShopQueue> {
   const db = useDb()
   const timestamps = to === 'IN_PROGRESS' ? { startedAt: sql`now()` } : { endedAt: sql`now()` }
 
-  let updated: { id: string }[]
+  let moved: boolean
   try {
-    updated = await db
-      .update(queueEntries)
-      .set({ status: to, ...timestamps })
-      .where(and(
-        eq(queueEntries.id, entryId),
-        eq(queueEntries.shopId, shopId),
-        inArray(queueEntries.status, statusesThatCanTransitionTo(to))
-      ))
-      .returning({ id: queueEntries.id })
+    moved = await db.transaction(async (tx) => {
+      const updated = await tx
+        .update(queueEntries)
+        .set({ status: to, ...timestamps })
+        .where(and(
+          eq(queueEntries.id, entryId),
+          eq(queueEntries.shopId, shopId),
+          inArray(queueEntries.status, statusesThatCanTransitionTo(to))
+        ))
+        .returning({ id: queueEntries.id })
+      if (updated.length === 0) {
+        return false
+      }
+      await afterTransition?.(tx)
+      return true
+    })
   }
   catch (error) {
     if (isUniqueViolation(error, ONE_IN_PROGRESS_PER_BARBER)) {
@@ -428,7 +439,7 @@ async function transitionEntry(shopId: string, entryId: string, to: QueueEntrySt
     throw error
   }
 
-  if (updated.length === 0) {
+  if (!moved) {
     const existing = await db.query.queueEntries.findFirst({
       where: and(eq(queueEntries.id, entryId), eq(queueEntries.shopId, shopId)),
       columns: { status: true }
@@ -447,9 +458,12 @@ export function startService(shopId: string, entryId: string): Promise<ShopQueue
   return transitionEntry(shopId, entryId, 'IN_PROGRESS')
 }
 
-/** IN_PROGRESS → COMPLETED. The next waiting customer becomes #1 automatically. */
-export function completeService(shopId: string, entryId: string): Promise<ShopQueue> {
-  return transitionEntry(shopId, entryId, 'COMPLETED')
+/**
+ * IN_PROGRESS → COMPLETED, optionally recording how the customer paid in the
+ * same transaction. The next waiting customer becomes #1 automatically.
+ */
+export function completeService(shopId: string, entryId: string, payment?: PaymentInput | null): Promise<ShopQueue> {
+  return transitionEntry(shopId, entryId, 'COMPLETED', payment ? tx => recordPayment(tx, entryId, payment) : undefined)
 }
 
 /** WAITING or IN_PROGRESS → CANCELLED. */

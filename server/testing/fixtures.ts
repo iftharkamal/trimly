@@ -41,7 +41,8 @@ export async function createShopFixture(
   if (!ownerUserId) {
     const [owner] = await db
       .insert(user)
-      .values({ id: 'test-owner', name: 'Test Owner', email: 'owner@trimly.test' })
+      // One owner per shop, so a test can create several shops.
+      .values({ id: `owner-${slug}`, name: 'Test Owner', email: `owner-${slug}@trimly.test` })
       .returning({ id: user.id })
     ownerUserId = owner!.id
   }

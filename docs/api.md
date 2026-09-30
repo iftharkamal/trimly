@@ -156,8 +156,27 @@ are still allowed while the shop is closed).
 | `POST /api/queue/:id/no-show` | `WAITING` → `NO_SHOW` |
 
 - **Auth:** owner only. The shop comes from the session; an entry from another shop is `404`.
-- **Params:** `id` — queue entry UUID. **Body:** none.
+- **Params:** `id` — queue entry UUID. **Body:** none, except for `complete` (below).
 - **200:** the recalculated queue — the same shape as `GET /api/shops/:shopId/queue` (owner view).
+
+### Completing with a payment
+
+`POST /api/queue/:id/complete` takes an optional body recording how the customer paid.
+Completing and recording the payment happen in **one transaction**: either both are saved
+or neither is. No online payment processing — the barber records what happened at the counter.
+
+```json
+{ "payment": { "method": "UPI", "amountMinor": 15000 } }
+```
+
+| Field | Type | Notes |
+|---|---|---|
+| `payment.method` | `"CASH"` | `"UPI"` | `"CARD"` | `"OTHER"` | |
+| `payment.amountMinor` | integer | Required, 0 – 10,000,000 (minor units). The dashboard prefills the service price; the barber may change it (discount, tip) |
+
+Send no body, `{}` or `{ "payment": null }` to complete **without** a payment (nothing is
+recorded and it doesn't count towards revenue). The body is strict: unknown fields are rejected.
+The payment is stored as `PAID` with `paidAt` = now.
 
 **Errors:** 400 invalid `id` · 401 `UNAUTHENTICATED` · 403 `FORBIDDEN` · 404 `ENTRY_NOT_FOUND` ·
 409 `INVALID_TRANSITION` (the entry's current status doesn't allow it, including repeated taps) ·
@@ -246,14 +265,14 @@ The shop behind a `/shop/:slug` link.
   "data": {
     "shop": { "id": "5b0c…", "name": "Faisal Barber", "slug": "faisal-barber", "timezone": "Asia/Kolkata", "currency": "INR", "isOpen": true },
     "owner": { "name": "Faisal" },
-    "today": { "customers": 4, "servicesCompleted": 1, "completedRevenueMinor": 15000 }
+    "today": { "customers": 4, "servicesCompleted": 1, "revenueMinor": 15000 }
   }
 }
 ```
 
 "Today" is the current calendar day in the shop's timezone. `customers` counts people who
-joined today and weren't cancelled or marked no-show. `completedRevenueMinor` is the total
-price of services completed today — it stands in for revenue until payments exist.
+joined today and weren't cancelled or marked no-show. `revenueMinor` is the total of
+`PAID` payments received today (services completed without payment don't count).
 
 **Errors:** 401 `UNAUTHENTICATED` · 403 `FORBIDDEN`.
 

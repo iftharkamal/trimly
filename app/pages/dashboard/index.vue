@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import type { JoinQueueBody } from '#shared/schemas/queue'
+import type { PaymentMethod } from '#shared/constants'
+import type { PaymentInput } from '#shared/schemas/payment'
 import type { QueueEntryDto, WaitingEntryDto } from '#shared/types/queue'
 
 definePageMeta({ layout: 'dashboard', middleware: 'auth' })
@@ -56,8 +58,8 @@ const stats = computed(() => {
     { label: 'Customers today', value: String(today.customers) },
     {
       label: 'Revenue today',
-      value: formatMoney(today.completedRevenueMinor, shop.currency),
-      hint: 'From completed services'
+      value: formatMoney(today.revenueMinor, shop.currency),
+      hint: 'Payments received'
     },
     { label: 'Services completed', value: String(today.servicesCompleted) }
   ]
@@ -112,6 +114,32 @@ const confirmCopy = computed(() => {
         label: 'Mark no-show'
       }
 })
+
+// Complete → payment modal → method → completed and paid in one request.
+const payingEntry = ref<QueueEntryDto | null>(null)
+const submittingPayment = ref<PaymentMethod | 'NONE' | null>(null)
+
+const paymentOpen = computed({
+  get: () => payingEntry.value !== null,
+  set: (value) => {
+    if (!value && submittingPayment.value === null) {
+      payingEntry.value = null
+    }
+  }
+})
+
+async function onCompleteWithPayment(payment: PaymentInput | null) {
+  const entry = payingEntry.value
+  if (!entry || !dashboard.value) {
+    return
+  }
+  submittingPayment.value = payment?.method ?? 'NONE'
+  const ok = await complete(entry.id, payment, dashboard.value.shop.currency)
+  submittingPayment.value = null
+  if (ok) {
+    payingEntry.value = null
+  }
+}
 
 async function onConfirm() {
   const target = confirming.value
@@ -280,7 +308,7 @@ async function onConfirm() {
               :completing="isPending(lane.current?.entry.id, 'complete')"
               :starting="isPending(lane.waiting[0]?.entry.id, 'start')"
               :busy="pending !== null"
-              @complete="complete"
+              @complete="payingEntry = lane.current?.entry ?? null"
               @start="start"
             />
 
@@ -308,6 +336,15 @@ async function onConfirm() {
       :barbers="barbers"
       :submitting="adding"
       @submit="onAddCustomer"
+    />
+
+    <CompleteServiceModal
+      v-if="dashboard"
+      v-model:open="paymentOpen"
+      :entry="payingEntry"
+      :currency="dashboard.shop.currency"
+      :submitting="submittingPayment"
+      @complete="onCompleteWithPayment"
     />
 
     <ConfirmModal

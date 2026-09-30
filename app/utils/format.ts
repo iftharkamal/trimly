@@ -41,3 +41,10 @@ export function formatTimeRange(startIso: string, endIso: string, timeZone: stri
   return new Intl.DateTimeFormat('en', { hour: 'numeric', minute: '2-digit', timeZone })
     .formatRange(new Date(startIso), new Date(endIso))
 }
+
+/** "₹" for INR, "$" for USD, ... */
+export function currencySymbol(currency: string): string {
+  return new Intl.NumberFormat('en', { style: 'currency', currency })
+    .formatToParts(0)
+    .find(part => part.type === 'currency')?.value ?? currency
+}

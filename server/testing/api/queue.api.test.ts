@@ -9,7 +9,7 @@ import type {
   QueueTrackingDto
 } from '../../../shared/types/queue'
 import { useDb } from '../../db'
-import { queueEntries } from '../../db/schema'
+import { payments, queueEntries } from '../../db/schema'
 import { createShopFixture, resetDatabase, resetShopData, type ShopFixture } from '../fixtures'
 
 const baseUrl = inject('apiBaseUrl')
@@ -333,7 +333,11 @@ describe('GET /api/dashboard', () => {
     const entryId = (await joinAsCustomer('Arjun', '+919990000001')).json.data.entry.id as string
     await walkIn('Walk-in')
     await act('start', entryId)
-    await act('complete', entryId)
+    // Paid with a discount: revenue is what was received, not the list price.
+    await request('POST', `/api/queue/${entryId}/complete`, {
+      body: { payment: { method: 'CASH', amountMinor: 12000 } },
+      cookie: owner.cookie
+    })
 
     const response = await request('GET', '/api/dashboard', { cookie: owner.cookie })
 
@@ -341,7 +345,7 @@ describe('GET /api/dashboard', () => {
     expect(response.json.data).toEqual({
       shop: { id: shop.shopId, name: 'Test Barber', slug: 'test-barber', timezone: 'Asia/Kolkata', currency: 'INR', isOpen: true },
       owner: { name: 'Test User' },
-      today: { customers: 2, servicesCompleted: 1, completedRevenueMinor: 15000 }
+      today: { customers: 2, servicesCompleted: 1, revenueMinor: 12000 }
     })
   })
 
@@ -509,5 +513,70 @@ describe('GET /api/track/:trackingCode and POST /api/track/:trackingCode/cancel'
     expectError(await track('not-a-code'), 400, 'VALIDATION_ERROR')
     expectError(await track(randomUUID()), 404, 'ENTRY_NOT_FOUND')
     expectError(await request('POST', `/api/track/${randomUUID()}/cancel`), 404, 'ENTRY_NOT_FOUND')
+  })
+})
+
+describe('POST /api/queue/:id/complete with a payment', () => {
+  async function inChair() {
+    const entryId = (await walkIn('Walk-in', shop.services.haircut)).json.data.entry.id as string
+    await act('start', entryId)
+    return entryId
+  }
+
+  function completeWith(entryId: string, body: unknown) {
+    return request('POST', `/api/queue/${entryId}/complete`, { body, cookie: owner.cookie })
+  }
+
+  async function todayRevenue() {
+    return (await request('GET', '/api/dashboard', { cookie: owner.cookie })).json.data.today.revenueMinor as number
+  }
+
+  it.each(['CASH', 'UPI', 'CARD'] as const)('records a %s payment and updates revenue', async (method) => {
+    const entryId = await inChair()
+
+    const response = await completeWith(entryId, { payment: { method, amountMinor: 15000 } })
+
+    expect(response.status).toBe(200)
+    expect(response.json.data.barbers[0].current).toBeNull()
+    const payment = await useDb().query.payments.findFirst({ where: eq(payments.queueEntryId, entryId) })
+    expect(payment).toMatchObject({ method, amountMinor: 15000, status: 'PAID' })
+    expect(await todayRevenue()).toBe(15000)
+  })
+
+  it('completes without a payment when none is given', async () => {
+    const withNull = await inChair()
+    expect((await completeWith(withNull, { payment: null })).status).toBe(200)
+
+    const withEmpty = await inChair()
+    expect((await completeWith(withEmpty, {})).status).toBe(200)
+
+    expect(await useDb().select().from(payments)).toHaveLength(0)
+    expect(await todayRevenue()).toBe(0)
+  })
+
+  it('validates the payment and completes nothing when it is invalid', async () => {
+    const entryId = await inChair()
+
+    for (const payment of [
+      { method: 'BITCOIN', amountMinor: 15000 },
+      { method: 'CASH', amountMinor: -100 },
+      { method: 'CASH', amountMinor: 150.5 },
+      { method: 'CASH' },
+      { method: 'CASH', amountMinor: 15000, status: 'REFUNDED' }
+    ]) {
+      expectError(await completeWith(entryId, { payment }), 400, 'VALIDATION_ERROR')
+    }
+    expectError(await completeWith(entryId, { payment: { method: 'CASH', amountMinor: 15000 }, tip: 5 }), 400, 'VALIDATION_ERROR')
+
+    const stored = await useDb().query.queueEntries.findFirst({ where: eq(queueEntries.id, entryId) })
+    expect(stored?.status).toBe('IN_PROGRESS')
+    expect(await useDb().select().from(payments)).toHaveLength(0)
+  })
+
+  it('records no payment for a service that cannot be completed', async () => {
+    const waiting = (await walkIn('Walk-in')).json.data.entry.id as string
+
+    expectError(await completeWith(waiting, { payment: { method: 'CASH', amountMinor: 10000 } }), 409, 'INVALID_TRANSITION')
+    expect(await useDb().select().from(payments)).toHaveLength(0)
   })
 })

@@ -20,3 +20,10 @@ export type TrackingState = (typeof TRACKING_STATES)[number]
 
 /** A waiting customer is "getting close" once the estimated wait is this short. */
 export const GETTING_CLOSE_MINUTES = 15
+
+export const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {
+  CASH: 'Cash',
+  UPI: 'UPI',
+  CARD: 'Card',
+  OTHER: 'Other'
+}

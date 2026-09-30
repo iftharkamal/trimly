@@ -1,6 +1,8 @@
 // The live queue for one shop, plus the barber's actions on it.
 // Positions and ETAs always come from the server: every action responds with
 // the recalculated queue, and the queue is re-fetched on an interval.
+import { PAYMENT_METHOD_LABELS } from '#shared/constants'
+import type { PaymentInput } from '#shared/schemas/payment'
 import type { JoinQueueBody } from '#shared/schemas/queue'
 import type { ApiSuccess, JoinQueueResultDto, OwnerShopQueueDto, ShopQueueDto } from '#shared/types/queue'
 
@@ -59,12 +61,24 @@ export async function useQueue(
     }
   }
 
-  async function run(action: QueueAction, entryId: string): Promise<boolean> {
+  async function run(
+    action: QueueAction,
+    entryId: string,
+    request: { body?: Record<string, unknown>, successDescription?: string } = {}
+  ): Promise<boolean> {
     pending.value = { entryId, action }
     try {
-      const response = await $fetch<ApiSuccess<OwnerShopQueueDto>>(`/api/queue/${entryId}/${action}`, { method: 'POST' })
+      const response = await $fetch<ApiSuccess<OwnerShopQueueDto>>(`/api/queue/${entryId}/${action}`, {
+        method: 'POST',
+        body: request.body
+      })
       showQueue(response.data)
-      toast.add({ title: ACTION_MESSAGES[action].success, color: 'success', icon: 'i-lucide-check' })
+      toast.add({
+        title: ACTION_MESSAGES[action].success,
+        description: request.successDescription,
+        color: 'success',
+        icon: 'i-lucide-check'
+      })
       options.onChange?.()
       return true
     }
@@ -132,7 +146,14 @@ export async function useQueue(
     pending,
     adding,
     start: (entryId: string) => run('start', entryId),
-    complete: (entryId: string) => run('complete', entryId),
+    /** Completes the service; with `payment`, records it in the same request. */
+    complete: (entryId: string, payment: PaymentInput | null = null, currency = '') =>
+      run('complete', entryId, {
+        body: { payment },
+        successDescription: payment
+          ? `${formatMoney(payment.amountMinor, currency)} paid by ${PAYMENT_METHOD_LABELS[payment.method]}`
+          : 'No payment recorded'
+      }),
     cancel: (entryId: string) => run('cancel', entryId),
     noShow: (entryId: string) => run('no-show', entryId),
     addCustomer

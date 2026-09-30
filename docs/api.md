@@ -95,6 +95,9 @@ The live queue for every barber in the shop.
 
 - `joinPreview` is what a customer joining that barber **now** could expect (shown before they join).
 - `soonestBarberId` is the barber an "any barber" join would be assigned to (`null` if no barber is active).
+- `upcoming` lists that barber's booked appointments not yet checked in (next 24 hours, earliest
+  first): `{ startsAt, endsAt, serviceName }`, plus `appointmentId` and `customerName` in the
+  owner view only. Their time is held in the estimates above.
 
 **200 (public view):** same structure with `"view": "public"`, and each `entry` is only
 `{ "serviceName": "Haircut", "durationMinutes": 20 }`.
@@ -265,6 +268,7 @@ The shop behind a `/shop/:slug` link.
   "data": {
     "shop": { "id": "5b0c…", "name": "Faisal Barber", "slug": "faisal-barber", "timezone": "Asia/Kolkata", "currency": "INR", "isOpen": true },
     "owner": { "name": "Faisal" },
+    "barbers": [{ "id": "a1f2…", "name": "Faisal" }],
     "today": { "customers": 4, "servicesCompleted": 1, "revenueMinor": 15000 }
   }
 }

@@ -4,7 +4,9 @@ const signingOut = ref(false)
 
 const links = [
   { label: 'Queue', to: '/dashboard', icon: 'i-lucide-list-ordered' },
-  { label: 'Reports', to: '/dashboard/reports', icon: 'i-lucide-chart-column' }
+  { label: 'Appointments', to: '/dashboard/appointments', icon: 'i-lucide-calendar' },
+  { label: 'Reports', to: '/dashboard/reports', icon: 'i-lucide-chart-column' },
+  { label: 'Settings', to: '/dashboard/settings', icon: 'i-lucide-settings' }
 ]
 
 async function signOut() {
@@ -36,17 +38,20 @@ async function signOut() {
             class="flex items-center gap-1"
             aria-label="Dashboard"
           >
+            <!-- Icons only on small screens; labels from the md breakpoint. -->
             <UButton
               v-for="link in links"
               :key="link.to"
               :to="link.to"
-              :label="link.label"
               :icon="link.icon"
+              :aria-label="link.label"
               color="neutral"
               :variant="route.path === link.to ? 'soft' : 'ghost'"
               size="sm"
               :aria-current="route.path === link.to ? 'page' : undefined"
-            />
+            >
+              <span class="hidden md:inline">{{ link.label }}</span>
+            </UButton>
           </nav>
         </div>
 

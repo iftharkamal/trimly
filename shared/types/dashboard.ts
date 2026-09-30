@@ -6,6 +6,8 @@ export interface DashboardDto {
   owner: {
     name: string
   }
+  /** Barbers who can take customers (for booking and walk-ins). */
+  barbers: { id: string, name: string }[]
   today: {
     /** Joined today and not cancelled or marked no-show. */
     customers: number

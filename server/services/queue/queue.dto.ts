@@ -15,7 +15,11 @@ function isoOrNull(date: Date | null): string | null {
   return date ? date.toISOString() : null
 }
 
-function toBarberQueueDto<E>(lane: BarberQueue, mapEntry: (entry: ActiveQueueEntry) => E): BarberQueueDto<E> {
+function toBarberQueueDto<E>(
+  lane: BarberQueue,
+  mapEntry: (entry: ActiveQueueEntry) => E,
+  showIdentity: boolean
+): BarberQueueDto<E> {
   const { current, waiting, nextAvailableAt } = lane.state
   const { joinPreview } = lane
   return {
@@ -42,7 +46,13 @@ function toBarberQueueDto<E>(lane: BarberQueue, mapEntry: (entry: ActiveQueueEnt
       customersAhead: joinPreview.customersAhead,
       estimatedStart: joinPreview.estimatedStart.toISOString(),
       waitMinutes: joinPreview.waitMinutes
-    }
+    },
+    upcoming: lane.upcoming.map(hold => ({
+      startsAt: hold.start.toISOString(),
+      endsAt: hold.end.toISOString(),
+      serviceName: hold.serviceName,
+      ...(showIdentity ? { appointmentId: hold.appointmentId, customerName: hold.customerName } : {})
+    }))
   }
 }
 
@@ -69,7 +79,7 @@ export function toOwnerQueueDto(queue: ShopQueue): OwnerShopQueueDto {
     view: 'owner',
     shopId: queue.shopId,
     calculatedAt: queue.calculatedAt.toISOString(),
-    barbers: queue.barbers.map(lane => toBarberQueueDto(lane, toQueueEntryDto)),
+    barbers: queue.barbers.map(lane => toBarberQueueDto(lane, toQueueEntryDto, true)),
     soonestBarberId: queue.soonestBarberId
   }
 }
@@ -79,7 +89,7 @@ export function toPublicQueueDto(queue: ShopQueue): PublicShopQueueDto {
     view: 'public',
     shopId: queue.shopId,
     calculatedAt: queue.calculatedAt.toISOString(),
-    barbers: queue.barbers.map(lane => toBarberQueueDto(lane, toPublicQueueEntryDto)),
+    barbers: queue.barbers.map(lane => toBarberQueueDto(lane, toPublicQueueEntryDto, false)),
     soonestBarberId: queue.soonestBarberId
   }
 }

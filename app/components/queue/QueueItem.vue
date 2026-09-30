@@ -35,10 +35,11 @@ const emit = defineEmits<{
         <p class="flex items-center gap-2 font-medium text-highlighted">
           <span class="truncate">{{ item.entry.customer.name }}</span>
           <UBadge
-            v-if="item.entry.source === 'WALK_IN'"
-            label="Walk-in"
+            v-if="item.entry.source !== 'ONLINE'"
+            :label="item.entry.source === 'APPOINTMENT' ? 'Appointment' : 'Walk-in'"
+            :icon="item.entry.source === 'APPOINTMENT' ? 'i-lucide-calendar-check' : undefined"
             color="neutral"
-            variant="subtle"
+            :variant="item.entry.source === 'APPOINTMENT' ? 'outline' : 'subtle'"
             size="sm"
             class="shrink-0"
           />

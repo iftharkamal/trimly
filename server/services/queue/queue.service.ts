@@ -15,7 +15,7 @@ import {
   services,
   shops
 } from '../../db/schema'
-import { getHoldsByBarber } from '../appointment.service'
+import { getHoldsByBarber, type AppointmentHold } from '../appointment.service'
 import { findOrCreateCustomer } from '../customer.service'
 import { localDayRange, type TimeRange } from '../day-range'
 import { DomainError } from '../errors'
@@ -60,6 +60,8 @@ export interface BarberQueue {
   state: QueueState<ActiveQueueEntry>
   /** What a customer joining this barber now could expect. */
   joinPreview: JoinPreview
+  /** Booked appointments not yet checked in, holding time (earliest first). */
+  upcoming: AppointmentHold[]
 }
 
 export interface ShopQueue {
@@ -180,13 +182,14 @@ async function loadShopQueue(shopId: string, now: Date, barberId?: string): Prom
     // A deactivated barber still shows while customers remain in their queue.
     .filter(barber => barber.isActive || entriesByBarber.has(barber.id))
     .map((barber) => {
+      const upcoming = holdsByBarber.get(barber.id) ?? []
       const state = calculateQueueState(entriesByBarber.get(barber.id) ?? [], {
         now,
         bufferMinutes: shop.serviceBufferMinutes,
         lastServiceEndedAt: lastEndByBarber.get(barber.id) ?? null,
-        holds: holdsByBarber.get(barber.id) ?? []
+        holds: upcoming
       })
-      return { barber, state, joinPreview: calculateJoinPreview(state, now) }
+      return { barber, state, joinPreview: calculateJoinPreview(state, now), upcoming }
     })
 
   return {

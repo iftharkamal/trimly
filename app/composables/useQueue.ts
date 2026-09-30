@@ -98,6 +98,30 @@ export async function useQueue(
     }
   }
 
+  /** An appointment customer arrived: into the queue by their booked time. */
+  const checkingIn = ref<string | null>(null)
+
+  async function checkIn(appointmentId: string): Promise<boolean> {
+    checkingIn.value = appointmentId
+    try {
+      const response = await $fetch<ApiSuccess<OwnerShopQueueDto>>(`/api/dashboard/appointments/${appointmentId}/check-in`, {
+        method: 'POST'
+      })
+      showQueue(response.data)
+      toast.add({ title: 'Checked in', description: 'Added to the queue by their booked time', color: 'success', icon: 'i-lucide-check' })
+      options.onChange?.()
+      return true
+    }
+    catch (caught) {
+      toast.add({ title: 'Could not check in', description: getApiErrorMessage(caught), color: 'error', icon: 'i-lucide-circle-alert' })
+      await refresh()
+      return false
+    }
+    finally {
+      checkingIn.value = null
+    }
+  }
+
   async function addCustomer(body: JoinQueueBody): Promise<boolean> {
     const id = toValue(shopId)
     if (!id) {
@@ -156,6 +180,8 @@ export async function useQueue(
       }),
     cancel: (entryId: string) => run('cancel', entryId),
     noShow: (entryId: string) => run('no-show', entryId),
-    addCustomer
+    addCustomer,
+    checkIn,
+    checkingIn
   }
 }

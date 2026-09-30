@@ -219,14 +219,29 @@ export function markAppointmentNoShow(shopId: string, appointmentId: string): Pr
   return closeAppointment(shopId, appointmentId, 'NO_SHOW')
 }
 
+/** A booked appointment still waiting for its customer, holding the barber's time. */
+export interface AppointmentHold extends TimeHold {
+  appointmentId: string
+  customerName: string
+  serviceName: string
+}
+
 /**
  * Time held per barber by appointments still waiting for their customer:
- * BOOKED, not yet over, starting within the next 24 hours.
+ * BOOKED, not yet over, starting within the next 24 hours. Earliest first.
  */
-export async function getHoldsByBarber(shopId: string, now: Date, barberId?: string): Promise<Map<string, TimeHold[]>> {
+export async function getHoldsByBarber(shopId: string, now: Date, barberId?: string): Promise<Map<string, AppointmentHold[]>> {
   const rows = await useDb()
-    .select({ barberId: appointments.barberId, start: appointments.startsAt, end: appointments.endsAt })
+    .select({
+      barberId: appointments.barberId,
+      start: appointments.startsAt,
+      end: appointments.endsAt,
+      appointmentId: appointments.id,
+      customerName: customers.name,
+      serviceName: appointments.serviceName
+    })
     .from(appointments)
+    .innerJoin(customers, eq(customers.id, appointments.customerId))
     .where(and(
       eq(appointments.shopId, shopId),
       eq(appointments.status, 'BOOKED'),
@@ -234,10 +249,11 @@ export async function getHoldsByBarber(shopId: string, now: Date, barberId?: str
       lt(appointments.startsAt, new Date(now.getTime() + HOLD_HORIZON_MS)),
       barberId ? eq(appointments.barberId, barberId) : undefined
     ))
+    .orderBy(asc(appointments.startsAt))
 
-  const holds = new Map<string, TimeHold[]>()
-  for (const { barberId: id, start, end } of rows) {
-    holds.set(id, [...(holds.get(id) ?? []), { start, end }])
+  const holds = new Map<string, AppointmentHold[]>()
+  for (const { barberId: id, ...hold } of rows) {
+    holds.set(id, [...(holds.get(id) ?? []), hold])
   }
   return holds
 }

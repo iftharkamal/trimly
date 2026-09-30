@@ -345,6 +345,7 @@ describe('GET /api/dashboard', () => {
     expect(response.json.data).toEqual({
       shop: { id: shop.shopId, name: 'Test Barber', slug: 'test-barber', timezone: 'Asia/Kolkata', currency: 'INR', isOpen: true },
       owner: { name: 'Test User' },
+      barbers: [{ id: shop.barberId, name: 'Faisal' }],
       today: { customers: 2, servicesCompleted: 1, revenueMinor: 12000 }
     })
   })

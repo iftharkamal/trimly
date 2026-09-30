@@ -8,7 +8,7 @@ export default defineConfig({
       {
         test: {
           name: 'unit',
-          include: ['server/**/*.test.ts'],
+          include: ['server/**/*.test.ts', 'shared/**/*.test.ts'],
           exclude: ['server/**/*.integration.test.ts', 'server/**/*.api.test.ts']
         }
       },

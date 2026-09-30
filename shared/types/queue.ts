@@ -61,6 +61,15 @@ export interface JoinPreviewDto {
   waitMinutes: number
 }
 
+/** A booked appointment holding time, not yet checked in. Identity only in the owner view. */
+export interface UpcomingAppointmentDto {
+  startsAt: string
+  endsAt: string
+  serviceName: string
+  appointmentId?: string
+  customerName?: string
+}
+
 export interface BarberQueueDto<E> {
   barber: {
     id: string
@@ -72,6 +81,7 @@ export interface BarberQueueDto<E> {
   /** When a customer joining this barber now would be expected to start. */
   nextAvailableAt: string
   joinPreview: JoinPreviewDto
+  upcoming: UpcomingAppointmentDto[]
 }
 
 export interface OwnerShopQueueDto {

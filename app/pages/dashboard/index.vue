@@ -30,7 +30,9 @@ const {
   complete,
   cancel,
   noShow,
-  addCustomer
+  addCustomer,
+  checkIn,
+  checkingIn
 } = await useQueue(shopId, { onChange: refreshDashboard })
 
 // Online joins change today's numbers too.
@@ -300,17 +302,28 @@ async function onConfirm() {
           </h2>
 
           <div class="grid items-start gap-6 lg:grid-cols-5">
-            <CurrentCustomer
-              class="lg:sticky lg:top-20 lg:col-span-2"
-              :current="lane.current"
-              :next="lane.waiting[0] ?? null"
-              :time-zone="timeZone"
-              :completing="isPending(lane.current?.entry.id, 'complete')"
-              :starting="isPending(lane.waiting[0]?.entry.id, 'start')"
-              :busy="pending !== null"
-              @complete="payingEntry = lane.current?.entry ?? null"
-              @start="start"
-            />
+            <div class="space-y-6 lg:sticky lg:top-20 lg:col-span-2">
+              <CurrentCustomer
+                :current="lane.current"
+                :next="lane.waiting[0] ?? null"
+                :time-zone="timeZone"
+                :completing="isPending(lane.current?.entry.id, 'complete')"
+                :starting="isPending(lane.waiting[0]?.entry.id, 'start')"
+                :busy="pending !== null"
+                @complete="payingEntry = lane.current?.entry ?? null"
+                @start="start"
+              />
+
+              <!-- Appointment → customer arrives → check in → queue -->
+              <UpcomingAppointments
+                v-if="lane.upcoming.length && queue"
+                :upcoming="lane.upcoming"
+                :time-zone="timeZone"
+                :calculated-at="queue.calculatedAt"
+                :checking-in="checkingIn"
+                @check-in="checkIn"
+              />
+            </div>
 
             <QueueList
               class="lg:col-span-3"

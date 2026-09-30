@@ -9,6 +9,7 @@
     "preview": "nuxt preview",
     "postinstall": "nuxt prepare",
     "typecheck": "nuxt typecheck",
+    "test": "vitest run",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:seed": "jiti server/db/seed.ts",
@@ -37,6 +38,7 @@
     "drizzle-kit": "^0.31.11",
     "jiti": "^2.7.0",
     "typescript": "^6.0.3",
+    "vitest": "^5.0.2",
     "vue-tsc": "^3.3.11"
   }
 }

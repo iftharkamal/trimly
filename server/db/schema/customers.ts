@@ -5,7 +5,8 @@ import { timestamps } from './columns'
 export const customers = pgTable('customers', {
   id: uuid('id').primaryKey().defaultRandom(),
   name: text('name').notNull(),
-  // Stored normalized (E.164) by the customer service.
-  phone: text('phone').notNull().unique(),
+  // Stored normalized (E.164) by the caller. Optional because a barber may add
+  // a walk-in without one; Postgres allows many NULLs under a unique constraint.
+  phone: text('phone').unique(),
   ...timestamps
 })

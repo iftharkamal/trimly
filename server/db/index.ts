@@ -12,6 +12,7 @@ function createDb() {
 }
 
 export type Database = ReturnType<typeof createDb>
+export type Transaction = Parameters<Parameters<Database['transaction']>[0]>[0]
 
 let instance: Database | undefined
 

@@ -39,6 +39,7 @@ request schemas are in [`shared/schemas/queue.ts`](../shared/schemas/queue.ts).
 | 403 | `FORBIDDEN` — signed in, but the account doesn't manage a shop · `EMAIL_NOT_VERIFIED` |
 | 404 | `SHOP_NOT_FOUND`, `SERVICE_NOT_FOUND`, `BARBER_NOT_FOUND`, `ENTRY_NOT_FOUND` |
 | 409 | `ALREADY_HAS_SHOP`, `SLUG_TAKEN`, `ALREADY_IN_QUEUE`, `BARBER_BUSY`, `INVALID_TRANSITION`, `NO_BARBER_AVAILABLE`, `SHOP_CLOSED`, `SLOT_TAKEN`, `SLOT_UNAVAILABLE`, `ALREADY_BOOKED` |
+| 429 | `RATE_LIMITED` — too many public joins or bookings; see `Retry-After` |
 | 500 | `INTERNAL_ERROR` |
 
 ## `GET /api/shops/:shopId/queue`
@@ -147,7 +148,24 @@ Add a customer to the queue.
 **Errors:** 400 `VALIDATION_ERROR` / `BAD_REQUEST` / `PHONE_REQUIRED` · 404 `SHOP_NOT_FOUND` /
 `SERVICE_NOT_FOUND` / `BARBER_NOT_FOUND` · 409 `ALREADY_IN_QUEUE` (this phone already has an
 active place in this shop) / `NO_BARBER_AVAILABLE` / `SHOP_CLOSED` (online joins only; walk-ins
-are still allowed while the shop is closed).
+are still allowed while the shop is closed) · 429 `RATE_LIMITED` (online joins only; see
+[Public request limits](#public-request-limits)).
+
+### Public request limits
+
+Online joins and online bookings need no sign-in, so they're limited per shop to stop one
+client flooding it. Over a limit the response is 429 `RATE_LIMITED` with a `Retry-After`
+header (seconds). Shop owners (walk-ins, dashboard bookings) are not limited.
+
+| Action | Per client IP | Per phone number |
+|---|---|---|
+| Join the queue online | 10 per 15 min | 5 per hour |
+| Book online | 10 per 15 min | 5 per hour |
+
+Every attempt counts, including ones refused for another reason (e.g. `ALREADY_IN_QUEUE`).
+Windows are fixed (they start on the clock, e.g. every 15 minutes), and counters are in the
+database (`request_limits`), pruned hourly. The per-IP limit is generous on purpose: many
+phones share one address on mobile networks and shop Wi-Fi.
 
 ## Queue actions
 
@@ -252,9 +270,11 @@ shape, not the envelope above.
   the email exists. The link leads to `/reset-password?token=…`; resetting signs out every
   existing session.
 - Links are valid for 1 hour.
-- **Rate limits** are per client IP (sign-in: a few attempts per 10 s, then 429). The IP is the
-  socket address, or the first `X-Forwarded-For` hop when `TRUST_PROXY=true`. Set that only
-  behind a proxy you control, or the header can be spoofed.
+- **Rate limits** are per client IP (sign-in and sign-up: 3 per 10 s; reset and verification
+  emails: 3 per minute; then 429). Counters are in the database (`rate_limit` table), so they
+  survive restarts and are shared by every server. The IP is the socket address, or the last
+  `X-Forwarded-For` entry when `TRUST_PROXY=true` (exactly one proxy in front; see
+  [production.md](production.md)).
 - **Email delivery** is `EMAIL_PROVIDER=console` (printed in the server log) for now; `file`
   appends JSON lines to `EMAIL_FILE_PATH` for tests. Production needs a real provider before
   real users can verify.
@@ -509,7 +529,8 @@ Public. Books one of the offered times; the server re-checks it, so only offered
   the booking link `/booking/:trackingCode` and is only returned here.
 
 **Errors:** 400 `VALIDATION_ERROR` · 404 · 409 `SLOT_UNAVAILABLE` (not offered or just taken) /
-`SLOT_TAKEN` / `ALREADY_BOOKED` (one upcoming booking per phone number per shop).
+`SLOT_TAKEN` / `ALREADY_BOOKED` (one upcoming booking per phone number per shop) · 429
+`RATE_LIMITED` (see [Public request limits](#public-request-limits)).
 
 ### `GET /api/bookings/:trackingCode` · `POST /api/bookings/:trackingCode/cancel`
 

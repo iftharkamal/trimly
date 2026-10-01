@@ -6,7 +6,7 @@ import { barbers, services, shops, user } from '../db/schema'
 export async function resetDatabase() {
   await useDb().execute(sql`
     truncate table payments, queue_entries, customers, services, barbers, shops,
-      session, account, verification, "user"
+      session, account, verification, "user", rate_limit, request_limits
     cascade
   `)
 }

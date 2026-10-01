@@ -11,7 +11,7 @@ import type {
 import { useDb } from '../../db'
 import { payments, queueEntries } from '../../db/schema'
 import { createShopFixture, resetDatabase, resetShopData, type ShopFixture } from '../fixtures'
-import { expectError, request, signUp, type ApiResponse } from './http'
+import { expectError, newClientIp, request, signUp, type ApiResponse } from './http'
 
 let owner: { userId: string, cookie: string }
 let outsider: { userId: string, cookie: string }
@@ -108,6 +108,36 @@ describe('POST /api/shops/:shopId/queue', () => {
     const response = await joinAsCustomer('Nabil', '+91 99900 00002', shop.services.beard)
 
     expect(response.json.data.entry).toMatchObject({ position: 2, customersAhead: 1, waitMinutes: 25 })
+  })
+
+  it('limits online joins per client per shop (429 with Retry-After), not other clients or the owner', async () => {
+    const ip = newClientIp()
+    const join = (index: number) => request('POST', `/api/shops/${shop.shopId}/queue`, {
+      ip,
+      body: { name: `Flood ${index}`, phone: `+9199900${String(index).padStart(5, '0')}`, serviceId: shop.services.haircut }
+    })
+
+    for (let index = 1; index <= 10; index++) {
+      expect((await join(index)).status).toBe(201)
+    }
+    const limited = await join(11)
+    expectError(limited, 429, 'RATE_LIMITED')
+    expect(Number(limited.headers.get('retry-after'))).toBeGreaterThan(0)
+
+    // Not created.
+    expect(await useDb().select().from(queueEntries)).toHaveLength(10)
+
+    // Another client, and the owner (walk-ins), are unaffected.
+    expect((await joinAsCustomer('Someone else', '+919990099999')).status).toBe(201)
+    expect((await request('POST', `/api/shops/${shop.shopId}/queue`, { ip, cookie: owner.cookie, body: { name: 'Walk-in', serviceId: shop.services.beard } })).status).toBe(201)
+  })
+
+  it('limits online joins per phone number, whichever client sends them', async () => {
+    const statuses: number[] = []
+    for (let attempt = 0; attempt < 6; attempt++) {
+      statuses.push((await joinAsCustomer('Arjun', '+919990000001')).status)
+    }
+    expect(statuses).toEqual([201, 409, 409, 409, 409, 429])
   })
 
   it('lets the owner add a walk-in without a phone number', async () => {
@@ -753,6 +783,20 @@ describe('online booking: availability, booking and the booking link', () => {
     expectError(await bookOnline(startsAt, '+919990000401'), 409, 'SLOT_UNAVAILABLE')
     expectError(await bookOnline(new Date(Date.now() + 40 * 86_400_000).toISOString(), '+919990000402'), 409, 'SLOT_UNAVAILABLE')
     expectError(await bookOnline(new Date(Date.parse(startsAt) + 7 * 60_000).toISOString(), '+919990000403'), 409, 'SLOT_UNAVAILABLE')
+  })
+
+  it('limits online bookings per phone number (429 RATE_LIMITED)', async () => {
+    await openAllDay()
+    const startsAt = await firstSlot()
+
+    // Each from a different client: the phone number is what's limited.
+    const statuses: number[] = []
+    for (let attempt = 0; attempt < 6; attempt++) {
+      statuses.push((await bookOnline(startsAt, '+919990000500')).status)
+    }
+    expect(statuses[0]).toBe(201)
+    expect(statuses.slice(1, 5).every(status => status === 409)).toBe(true)
+    expect(statuses[5]).toBe(429)
   })
 
   it('requires a phone number and a strict body (400)', async () => {

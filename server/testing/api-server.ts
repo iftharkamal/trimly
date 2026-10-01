@@ -69,6 +69,8 @@ export default async function setup(project: TestProject) {
       DATABASE_URL: databaseUrl,
       BETTER_AUTH_URL: baseUrl,
       BETTER_AUTH_SECRET: 'api-tests-only-secret-not-for-production-use',
+      // Not the developer's .env (which may trust ngrok tunnels).
+      BETTER_AUTH_TRUSTED_ORIGINS: '',
       EMAIL_PROVIDER: 'file',
       // Tests act as different clients via X-Forwarded-For (as behind a real proxy).
       TRUST_PROXY: 'true',

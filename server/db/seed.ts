@@ -1,21 +1,31 @@
 // Development seed: one realistic shop. Run with `pnpm db:seed`.
 // Safe to re-run: an existing shop is left alone, except that missing
-// opening hours are filled in.
+// opening hours are filled in. Refuses production and non-local databases
+// (see seed-guard.ts).
 import { existsSync } from 'node:fs'
 import { eq } from 'drizzle-orm'
 import { useAuth } from '../utils/auth'
 import { useDb } from './index'
 import { barbers, services, shopHours, shops, user } from './schema'
+import { seedRefusal } from './seed-guard'
 
 // Runs outside Nuxt, so load .env ourselves (Node built-in, no dotenv).
 if (existsSync('.env')) {
   process.loadEnvFile('.env')
 }
 
+const refusal = seedRefusal(process.env)
+if (refusal) {
+  console.error(`Not seeding: ${refusal}`)
+  process.exit(1)
+}
+
+const DEFAULT_PASSWORD = 'trimly-dev-password'
+
 const OWNER = {
   name: 'Faisal',
   email: 'faisal@trimly.local',
-  password: process.env.SEED_OWNER_PASSWORD ?? 'trimly-dev-password'
+  password: process.env.SEED_OWNER_PASSWORD ?? DEFAULT_PASSWORD
 }
 
 const SHOP = {
@@ -94,7 +104,9 @@ async function seed() {
   })
   await ensureOpeningHours(shopId)
 
-  console.log(`Seeded "${SHOP.name}" (/shop/${SHOP.slug}). Owner login: ${OWNER.email} / ${OWNER.password}`)
+  // Only echo the password when it's the well-known development default.
+  const password = OWNER.password === DEFAULT_PASSWORD ? DEFAULT_PASSWORD : '(SEED_OWNER_PASSWORD)'
+  console.log(`Seeded "${SHOP.name}" (/shop/${SHOP.slug}). Owner login: ${OWNER.email} / ${password}`)
 }
 
 try {

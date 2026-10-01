@@ -4,10 +4,11 @@ import type { OnlineBookingResultDto } from '../../../../shared/types/booking'
 import { toBookingDto } from '../../../services/booking.dto'
 import { bookOnline, getBooking } from '../../../services/booking.service'
 
-// Public: a customer books one of the offered slots.
+// Public: a customer books one of the offered slots (rate limited).
 export default defineApiHandler(async (event): Promise<OnlineBookingResultDto> => {
   const { shopId } = parseParams(event, shopIdParamsSchema)
   const body = await parseBody(event, onlineBookingBodySchema)
+  await enforcePublicLimits(event, 'booking', shopId, body.customer.phone)
 
   const appointment = await bookOnline({
     shopId,

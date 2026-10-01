@@ -30,6 +30,10 @@ function createAuth() {
       // Without this, rate limits fall back to one bucket shared by everyone.
       ipAddress: { ipAddressHeaders: [CLIENT_IP_HEADER] }
     },
+    // Counters in the database (rate_limit table): they survive restarts and
+    // are shared by every server. On in development too, which `pnpm tunnel`
+    // exposes to the internet.
+    rateLimit: { enabled: true, storage: 'database' },
     emailAndPassword: {
       enabled: true,
       minPasswordLength: 8,

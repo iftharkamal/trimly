@@ -43,7 +43,8 @@ export default defineNuxtConfig({
     },
     // "Getting close" also happens as time passes, not only when the queue changes.
     scheduledTasks: {
-      '* * * * *': ['notifications:proximity']
+      '* * * * *': ['notifications:proximity'],
+      '0 * * * *': ['maintenance:prune-request-limits']
     }
   },
 

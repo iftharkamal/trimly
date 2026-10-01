@@ -17,6 +17,7 @@ export function newClientIp(): string {
 
 export interface ApiResponse {
   status: number
+  headers: Headers
   // Arbitrary JSON; each test asserts the parts it cares about.
   json: any
 }
@@ -40,7 +41,7 @@ export async function request(
     body: options.rawBody ?? (options.body === undefined ? undefined : JSON.stringify(options.body))
   })
   const text = await response.text()
-  return { status: response.status, json: text ? JSON.parse(text) : null }
+  return { status: response.status, headers: response.headers, json: text ? JSON.parse(text) : null }
 }
 
 export function cookieFrom(response: Response): string {

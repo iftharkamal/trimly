@@ -3,6 +3,8 @@
 // server's email file (EMAIL_PROVIDER=file), so the real links are followed.
 import { randomUUID } from 'node:crypto'
 import { beforeAll, describe, expect, it } from 'vitest'
+import { useDb } from '../../db'
+import { rateLimit } from '../../db/schema'
 import { resetDatabase } from '../fixtures'
 import { countEmails, linkIn, waitForEmail } from './emails'
 import { baseUrl, cookieFrom, expectError, newClientIp, request, signIn, signUp, TEST_PASSWORD } from './http'
@@ -90,6 +92,28 @@ describe('rate limiting', () => {
 
     // Someone else can still sign in.
     expect((await signIn(email, TEST_PASSWORD, newClientIp())).status).toBe(200)
+  })
+
+  it('ignores client-supplied X-Forwarded-For entries in front of the proxy\'s own', async () => {
+    const email = uniqueEmail('spoofer')
+    await signUp(email)
+    const attacker = newClientIp()
+
+    // The client invents a new first entry each time; the proxy appends the real address.
+    const statuses: number[] = []
+    for (let attempt = 0; attempt < 5; attempt++) {
+      statuses.push((await signIn(email, 'wrong-password', `${newClientIp()}, ${attacker}`)).status)
+    }
+    expect(statuses).toContain(429)
+  })
+
+  it('keeps the counters in the database', async () => {
+    const email = uniqueEmail('stored')
+    await signUp(email)
+    await signIn(email, 'wrong-password', newClientIp())
+
+    const rows = await useDb().select().from(rateLimit)
+    expect(rows.some(row => row.key.includes('/sign-in/email'))).toBe(true)
   })
 })
 

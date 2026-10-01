@@ -31,12 +31,16 @@ request schemas are in [`shared/schemas/queue.ts`](../shared/schemas/queue.ts).
 - **Dates** are ISO 8601 strings in UTC. **Money** is integer minor units (paise for INR).
 - **Auth** is the Better Auth session cookie (sign in via `/api/auth/*`). "Owner" means the
   signed-in user owns the shop in question.
+- **Other websites** can't change anything: a `POST`/`PUT`/`PATCH`/`DELETE` whose `Origin` header
+  isn't this app (same host, `BETTER_AUTH_URL`, or `BETTER_AUTH_TRUSTED_ORIGINS`) gets 403
+  `FORBIDDEN_ORIGIN`. Requests without `Origin` (not from a browser) are allowed; auth still
+  applies. `/api/auth/*` is checked by Better Auth itself.
 
 | Status | Codes |
 |---|---|
 | 400 | `VALIDATION_ERROR`, `BAD_REQUEST` (e.g. malformed JSON), `PHONE_REQUIRED` |
 | 401 | `UNAUTHENTICATED` — no valid session |
-| 403 | `FORBIDDEN` — signed in, but the account doesn't manage a shop · `EMAIL_NOT_VERIFIED` |
+| 403 | `FORBIDDEN` — signed in, but the account doesn't manage a shop · `EMAIL_NOT_VERIFIED` · `FORBIDDEN_ORIGIN` — sent by another website |
 | 404 | `SHOP_NOT_FOUND`, `SERVICE_NOT_FOUND`, `BARBER_NOT_FOUND`, `ENTRY_NOT_FOUND` |
 | 409 | `ALREADY_HAS_SHOP`, `SLUG_TAKEN`, `ALREADY_IN_QUEUE`, `BARBER_BUSY`, `INVALID_TRANSITION`, `NO_BARBER_AVAILABLE`, `SHOP_CLOSED`, `SLOT_TAKEN`, `SLOT_UNAVAILABLE`, `ALREADY_BOOKED` |
 | 429 | `RATE_LIMITED` — too many public joins or bookings; see `Retry-After` |

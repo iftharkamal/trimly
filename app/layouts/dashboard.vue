@@ -1,6 +1,6 @@
 <script setup lang="ts">
 const route = useRoute()
-const signingOut = ref(false)
+const { signingOut, signOut } = useSignOut()
 
 // Shop alerts on every dashboard page: online joins, bookings, cancellations.
 const { permission, ready: alertsReady, enable, alert } = useBrowserNotifications()
@@ -35,13 +35,6 @@ const links = [
   { label: 'Reports', to: '/dashboard/reports', icon: 'i-lucide-chart-column' },
   { label: 'Settings', to: '/dashboard/settings', icon: 'i-lucide-settings' }
 ]
-
-async function signOut() {
-  signingOut.value = true
-  await authClient.signOut()
-  clearNuxtData()
-  await navigateTo('/login')
-}
 </script>
 
 <template>

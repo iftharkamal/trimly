@@ -117,6 +117,24 @@ describe('rate limiting', () => {
   })
 })
 
+describe('signing out other devices', () => {
+  it('ends every other session and keeps this one', async () => {
+    const email = uniqueEmail('devices')
+    const { cookie: phone } = await signUp(email)
+    const laptop = cookieFrom(await signIn(email))
+
+    const revoked = await request('POST', '/api/auth/revoke-other-sessions', { cookie: laptop, body: {} })
+    expect(revoked.status).toBe(200)
+
+    expect((await request('GET', '/api/me', { cookie: laptop })).status).toBe(200)
+    expectError(await request('GET', '/api/me', { cookie: phone }), 401, 'UNAUTHENTICATED')
+  })
+
+  it('needs a session', async () => {
+    expect((await request('POST', '/api/auth/revoke-other-sessions', { body: {} })).status).toBe(401)
+  })
+})
+
 describe('password reset', () => {
   it('resets through the emailed link; the old password and other sessions stop working', async () => {
     const email = uniqueEmail('reset')

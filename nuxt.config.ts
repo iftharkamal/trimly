@@ -6,7 +6,7 @@ export default defineNuxtConfig({
   // The API tests build into their own directory so they can run while `pnpm dev` is running.
   buildDir: process.env.NUXT_BUILD_DIR || '.nuxt',
 
-  modules: ['@nuxt/ui', '@pinia/nuxt'],
+  modules: ['@nuxt/ui'],
 
   // Components are grouped in folders by feature but named by file
   // (components/queue/QueueItem.vue → <QueueItem>).

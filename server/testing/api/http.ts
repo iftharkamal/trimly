@@ -25,9 +25,14 @@ export interface ApiResponse {
 export async function request(
   method: 'GET' | 'POST' | 'PATCH' | 'PUT',
   path: string,
-  options: { body?: unknown, rawBody?: string, cookie?: string, ip?: string } = {}
+  // origin: what a browser would send; defaults to the app itself, null sends none (not a browser).
+  options: { body?: unknown, rawBody?: string, cookie?: string, ip?: string, origin?: string | null } = {}
 ): Promise<ApiResponse> {
-  const headers: Record<string, string> = { 'origin': baseUrl, 'x-forwarded-for': options.ip ?? newClientIp() }
+  const headers: Record<string, string> = { 'x-forwarded-for': options.ip ?? newClientIp() }
+  const origin = options.origin === undefined ? baseUrl : options.origin
+  if (origin !== null) {
+    headers.origin = origin
+  }
   if (options.cookie) {
     headers.cookie = options.cookie
   }

@@ -9,7 +9,7 @@
 
     <div class="relative rounded-3xl bg-default p-5 shadow-lg ring-1 ring-default">
       <div class="flex items-center justify-between">
-        <span class="text-xs font-medium text-muted">Faisal Barber</span>
+        <span class="text-xs font-medium text-muted">Your barber</span>
         <span class="flex items-center gap-1.5 text-[11px] font-medium text-muted">
           <span class="size-1.5 rounded-full bg-success" />
           Live

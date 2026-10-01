@@ -13,7 +13,7 @@ export const shops = pgTable(
       .unique()
       .references(() => user.id),
     name: text('name').notNull(),
-    // Public URL segment: /s/:slug
+    // Public URL segment: /shop/:slug
     slug: text('slug').notNull().unique(),
     phone: text('phone'),
     address: text('address'),

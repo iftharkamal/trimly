@@ -14,7 +14,9 @@ and **logs a warning** for the other problems below.
 3. **Public URL.** `BETTER_AUTH_URL` = the https address people use, e.g.
    `https://trimly.example.com`. Email links are built from it.
 4. **Trusted origins.** Leave `BETTER_AUTH_TRUSTED_ORIGINS` empty, or list exact extra origins.
-   Never the ngrok wildcards from development: they trust every site hosted on ngrok.
+   Never the ngrok wildcards from development: they trust every site hosted on ngrok. The same
+   list (plus `BETTER_AUTH_URL` and the request's own host) decides which sites may send
+   state-changing API requests; anything else gets 403 `FORBIDDEN_ORIGIN`.
 5. **Client IP (rate limits).** Sign-in, sign-up, password reset and the public join/booking
    limits are all per client IP.
    - App reached directly: `TRUST_PROXY=false`.

@@ -11,7 +11,7 @@ import type {
 import { useDb } from '../../db'
 import { payments, queueEntries } from '../../db/schema'
 import { createShopFixture, resetDatabase, resetShopData, type ShopFixture } from '../fixtures'
-import { expectError, newClientIp, request, signUp, type ApiResponse } from './http'
+import { baseUrl, expectError, newClientIp, request, signUp, type ApiResponse } from './http'
 
 let owner: { userId: string, cookie: string }
 let outsider: { userId: string, cookie: string }
@@ -388,6 +388,34 @@ describe('queue join preview', () => {
     expect(queue.soonestBarberId).toBe(shop.barberId)
     // Arjun 0–20, then the buffer: a new customer would be #2, starting in 25 minutes.
     expect(queue.barbers[0]!.joinPreview).toMatchObject({ position: 2, customersAhead: 1, waitMinutes: 25 })
+  })
+})
+
+describe('requests from other websites (CSRF)', () => {
+  const closeShop = (origin: string | null) =>
+    request('PATCH', '/api/dashboard/shop', { cookie: owner.cookie, origin, body: { isOpen: false } })
+
+  it('refuses state-changing requests from another site, even with the owner\'s cookie', async () => {
+    expectError(await closeShop('https://evil.example.net'), 403, 'FORBIDDEN_ORIGIN')
+    expectError(await closeShop('null'), 403, 'FORBIDDEN_ORIGIN')
+    expectError(await request('POST', `/api/shops/${shop.shopId}/queue`, {
+      origin: 'https://evil.example.net',
+      body: { name: 'Arjun', phone: '+919990000001', serviceId: shop.services.haircut }
+    }), 403, 'FORBIDDEN_ORIGIN')
+
+    // Nothing changed.
+    const profile = await request('GET', '/api/dashboard', { cookie: owner.cookie })
+    expect(profile.json.data.shop.isOpen).toBe(true)
+    expect(await useDb().select().from(queueEntries)).toHaveLength(0)
+  })
+
+  it('allows the app itself, and clients that send no Origin (not a browser)', async () => {
+    expect((await closeShop(baseUrl)).status).toBe(200)
+    expect((await closeShop(null)).status).toBe(200)
+  })
+
+  it('does not block reads from other sites', async () => {
+    expect((await request('GET', `/api/shops/${shop.shopId}/queue`, { origin: 'https://evil.example.net' })).status).toBe(200)
   })
 })
 

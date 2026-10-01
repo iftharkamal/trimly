@@ -9,6 +9,7 @@ useHead({ title: 'Set up your shop · Trimly' })
 
 const { data: me } = await useMe()
 const requestUrl = useRequestURL()
+const { signingOut, signOut } = useSignOut()
 
 // India first; otherwise people pick their own.
 function currencyFor(timeZone: string) {
@@ -229,5 +230,18 @@ async function onSubmit(event: { data: CreateShopBody }) {
         :disabled="slugStatus === 'taken'"
       />
     </UForm>
+
+    <template #footer>
+      <span class="break-all">Signed in as {{ me?.user.email }}</span>
+      ·
+      <button
+        type="button"
+        class="font-medium text-highlighted underline-offset-2 hover:underline disabled:opacity-50"
+        :disabled="signingOut"
+        @click="signOut"
+      >
+        Sign out
+      </button>
+    </template>
   </AuthShell>
 </template>

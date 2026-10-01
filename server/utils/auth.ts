@@ -4,15 +4,7 @@ import { useDb } from '../db'
 import * as schema from '../db/schema'
 import { sendEmailInBackground } from '../services/email/email.service'
 import { passwordResetEmail, verificationEmail } from '../services/email/templates'
-
-// Extra origins allowed to sign in besides BETTER_AUTH_URL, comma-separated.
-// Wildcards are supported, e.g. "https://*.ngrok-free.app" for `pnpm tunnel`.
-function trustedOrigins(): string[] {
-  return (process.env.BETTER_AUTH_TRUSTED_ORIGINS ?? '')
-    .split(',')
-    .map(origin => origin.trim())
-    .filter(Boolean)
-}
+import { configuredTrustedOrigins } from './request-origin'
 
 /**
  * Header carrying the client's IP to Better Auth (for per-client rate limits).
@@ -25,7 +17,8 @@ export const CLIENT_IP_HEADER = 'x-trimly-client-ip'
 function createAuth() {
   return betterAuth({
     database: drizzleAdapter(useDb(), { provider: 'pg', schema }),
-    trustedOrigins: trustedOrigins(),
+    // Besides BETTER_AUTH_URL; see server/utils/request-origin.ts.
+    trustedOrigins: configuredTrustedOrigins(),
     advanced: {
       // Without this, rate limits fall back to one bucket shared by everyone.
       ipAddress: { ipAddressHeaders: [CLIENT_IP_HEADER] }

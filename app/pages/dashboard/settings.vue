@@ -5,6 +5,22 @@ definePageMeta({ layout: 'dashboard', middleware: ['auth', 'shop'] })
 useHead({ title: 'Settings · Trimly' })
 
 const { hours, error, refresh, saving, save } = await useOpeningHours()
+const { data: me } = await useMe()
+const toast = useToast()
+
+// Sign out of every other phone or computer (e.g. a lost phone); stay signed in here.
+const confirmSignOutOthers = ref(false)
+const signingOutOthers = ref(false)
+
+async function signOutOthers() {
+  signingOutOthers.value = true
+  const { error: failed } = await authClient.revokeOtherSessions()
+  signingOutOthers.value = false
+  confirmSignOutOthers.value = false
+  toast.add(failed
+    ? { title: 'Could not sign out other devices', description: failed.message, color: 'error', icon: 'i-lucide-circle-alert' }
+    : { title: 'Signed out of other devices', description: 'This device stays signed in.', color: 'success', icon: 'i-lucide-check' })
+}
 
 function copy(value: OpeningHours | null | undefined): OpeningHours['days'] {
   return value ? value.days.map(day => ({ weekday: day.weekday, ranges: day.ranges.map(range => ({ ...range })) })) : []
@@ -86,5 +102,41 @@ async function onSave() {
         </div>
       </template>
     </UCard>
+
+    <UCard>
+      <template #header>
+        <h2 class="font-semibold text-highlighted">
+          Account
+        </h2>
+        <p
+          v-if="me"
+          class="mt-1 break-all text-sm text-muted"
+        >
+          Signed in as {{ me.user.email }}
+        </p>
+      </template>
+
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <p class="max-w-md text-sm text-muted">
+          Lost a phone, or signed in on a shared computer? Sign out everywhere else. You stay signed in here.
+        </p>
+        <UButton
+          label="Sign out of other devices"
+          icon="i-lucide-log-out"
+          color="neutral"
+          variant="outline"
+          @click="confirmSignOutOthers = true"
+        />
+      </div>
+    </UCard>
+
+    <ConfirmModal
+      v-model:open="confirmSignOutOthers"
+      title="Sign out of other devices?"
+      description="Every other phone and computer using this account will need to sign in again."
+      confirm-label="Sign out others"
+      :loading="signingOutOthers"
+      @confirm="signOutOthers"
+    />
   </UContainer>
 </template>

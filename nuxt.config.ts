@@ -14,7 +14,14 @@ export default defineNuxtConfig({
 
   app: {
     head: {
-      title: 'Trimly'
+      title: 'Trimly',
+      meta: [
+        // Full-bleed on notched phones; pages pad with env(safe-area-inset-*).
+        { name: 'viewport', content: 'width=device-width, initial-scale=1, viewport-fit=cover' },
+        // Browser bar matches the page canvas.
+        { name: 'theme-color', content: '#fafafa', media: '(prefers-color-scheme: light)' },
+        { name: 'theme-color', content: '#09090b', media: '(prefers-color-scheme: dark)' }
+      ]
     }
   },
 

@@ -35,6 +35,35 @@ function forget(kind: PlaceKind, shopSlug: string) {
   }
 }
 
+export interface RememberedPlace {
+  kind: PlaceKind
+  shopSlug: string
+  code: string
+}
+
+/** Every queue place and booking this device remembers, across shops. */
+export function listRememberedPlaces(): RememberedPlace[] {
+  try {
+    const places: RememberedPlace[] = []
+    for (let index = 0; index < localStorage.length; index++) {
+      const key = localStorage.key(index)
+      const match = key?.match(/^trimly:(queue|booking):(.+)$/)
+      const code = key ? localStorage.getItem(key) : null
+      if (match && code) {
+        places.push({ kind: match[1] as PlaceKind, shopSlug: match[2]!, code })
+      }
+    }
+    return places
+  }
+  catch {
+    return []
+  }
+}
+
+export function forgetPlace(place: RememberedPlace) {
+  forget(place.kind, place.shopSlug)
+}
+
 export const rememberQueuePlace = (shopSlug: string, code: string) => remember('queue', shopSlug, code)
 export const recallQueuePlace = (shopSlug: string) => recall('queue', shopSlug)
 export const forgetQueuePlace = (shopSlug: string) => forget('queue', shopSlug)

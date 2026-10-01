@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { openingHoursSchema, type OpeningHours } from '#shared/schemas/hours'
 
-definePageMeta({ layout: 'dashboard', middleware: 'auth' })
+definePageMeta({ layout: 'dashboard', middleware: ['auth', 'shop'] })
 useHead({ title: 'Settings · Trimly' })
 
 const { hours, error, refresh, saving, save } = await useOpeningHours()

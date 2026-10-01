@@ -23,3 +23,8 @@ export interface ServiceDto {
   durationMinutes: number
   priceMinor: number
 }
+
+/** A service as the owner manages it (archived ones included). */
+export interface ManagedServiceDto extends ServiceDto {
+  isActive: boolean
+}

@@ -31,6 +31,7 @@ const bell = computed(() => {
 const links = [
   { label: 'Queue', to: '/dashboard', icon: 'i-lucide-list-ordered' },
   { label: 'Appointments', to: '/dashboard/appointments', icon: 'i-lucide-calendar' },
+  { label: 'Services', to: '/dashboard/services', icon: 'i-lucide-tags' },
   { label: 'Reports', to: '/dashboard/reports', icon: 'i-lucide-chart-column' },
   { label: 'Settings', to: '/dashboard/settings', icon: 'i-lucide-settings' }
 ]

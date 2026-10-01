@@ -1,5 +1,5 @@
 import { and, asc, eq } from 'drizzle-orm'
-import { useDb } from '../db'
+import { useDb, type Transaction } from '../db'
 import { barbers } from '../db/schema'
 
 export interface BarberSummary {
@@ -14,4 +14,13 @@ export function listActiveBarbers(shopId: string): Promise<BarberSummary[]> {
     .from(barbers)
     .where(and(eq(barbers.shopId, shopId), eq(barbers.isActive, true)))
     .orderBy(asc(barbers.createdAt))
+}
+
+/** Adds a barber to a shop, inside the caller's transaction. */
+export async function createBarber(tx: Transaction, shopId: string, name: string): Promise<BarberSummary> {
+  const [barber] = await tx.insert(barbers).values({ shopId, name }).returning({ id: barbers.id, name: barbers.name })
+  if (!barber) {
+    throw new Error('Failed to create barber')
+  }
+  return barber
 }

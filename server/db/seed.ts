@@ -56,13 +56,13 @@ async function ensureOpeningHours(shopId: string) {
 async function ensureOwner(): Promise<string> {
   const db = useDb()
   const existing = await db.query.user.findFirst({ where: eq(user.email, OWNER.email) })
-  if (existing) {
-    return existing.id
-  }
 
   // Go through Better Auth so the password is hashed and the account row is created correctly.
-  const { user: created } = await useAuth().api.signUpEmail({ body: OWNER })
-  return created.id
+  const id = existing?.id ?? (await useAuth().api.signUpEmail({ body: OWNER })).user.id
+
+  // Sign-in requires a verified email; the development owner is verified up front.
+  await db.update(user).set({ emailVerified: true }).where(eq(user.id, id))
+  return id
 }
 
 async function seed() {
@@ -71,6 +71,7 @@ async function seed() {
   const existingShop = await db.query.shops.findFirst({ where: eq(shops.slug, SHOP.slug) })
   if (existingShop) {
     console.log(`Shop "${SHOP.slug}" already exists.`)
+    await ensureOwner()
     await ensureOpeningHours(existingShop.id)
     return
   }

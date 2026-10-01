@@ -1,7 +1,9 @@
 import { asc, eq } from 'drizzle-orm'
 import type { OpeningHours } from '../../shared/schemas/hours'
 import { useDb } from '../db'
+import { isUniqueViolation } from '../db/errors'
 import { shopHours, shops } from '../db/schema'
+import { createBarber } from './barber.service'
 import { DomainError } from './errors'
 
 /** The shop a user owns (MVP: at most one), or null. */
@@ -97,4 +99,65 @@ export async function getServiceBufferMinutes(shopId: string): Promise<number> {
     throw new DomainError('SHOP_NOT_FOUND', 404, 'Shop not found')
   }
   return shop.serviceBufferMinutes
+}
+
+// New shops start with these hours (editable in Settings): Mon–Sat 09:00–13:00
+// and 14:00–20:00, Sunday closed.
+const DEFAULT_OPENING_HOURS = [1, 2, 3, 4, 5, 6].flatMap(weekday => [
+  { weekday, opensAt: '09:00', closesAt: '13:00' },
+  { weekday, opensAt: '14:00', closesAt: '20:00' }
+])
+
+export interface NewShopInput {
+  /** From the session, never from the request body. */
+  ownerUserId: string
+  name: string
+  slug: string
+  timezone: string
+  currency: string
+  barberName: string
+}
+
+/** Whether a link name is free. */
+export async function isSlugAvailable(slug: string): Promise<boolean> {
+  const shop = await useDb().query.shops.findFirst({ where: eq(shops.slug, slug), columns: { id: true } })
+  return !shop
+}
+
+/**
+ * Creates the owner's shop with its first barber and default opening hours,
+ * in one transaction. The database enforces one shop per owner and unique
+ * link names, so two requests at once can't create two shops.
+ */
+export async function createShopForOwner(input: NewShopInput): Promise<ShopProfile> {
+  try {
+    const shopId = await useDb().transaction(async (tx) => {
+      const [shop] = await tx
+        .insert(shops)
+        .values({
+          ownerUserId: input.ownerUserId,
+          name: input.name,
+          slug: input.slug,
+          timezone: input.timezone,
+          currency: input.currency
+        })
+        .returning({ id: shops.id })
+      if (!shop) {
+        throw new Error('Failed to create shop')
+      }
+      await createBarber(tx, shop.id, input.barberName)
+      await tx.insert(shopHours).values(DEFAULT_OPENING_HOURS.map(hours => ({ ...hours, shopId: shop.id })))
+      return shop.id
+    })
+    return await getShopProfile(shopId)
+  }
+  catch (error) {
+    if (isUniqueViolation(error, 'shops_owner_user_id_unique')) {
+      throw new DomainError('ALREADY_HAS_SHOP', 409, 'This account already has a shop')
+    }
+    if (isUniqueViolation(error, 'shops_slug_unique')) {
+      throw new DomainError('SLUG_TAKEN', 409, 'That link name is taken. Try another.')
+    }
+    throw error
+  }
 }

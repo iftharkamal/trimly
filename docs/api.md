@@ -36,9 +36,9 @@ request schemas are in [`shared/schemas/queue.ts`](../shared/schemas/queue.ts).
 |---|---|
 | 400 | `VALIDATION_ERROR`, `BAD_REQUEST` (e.g. malformed JSON), `PHONE_REQUIRED` |
 | 401 | `UNAUTHENTICATED` — no valid session |
-| 403 | `FORBIDDEN` — signed in, but the account doesn't manage a shop |
+| 403 | `FORBIDDEN` — signed in, but the account doesn't manage a shop · `EMAIL_NOT_VERIFIED` |
 | 404 | `SHOP_NOT_FOUND`, `SERVICE_NOT_FOUND`, `BARBER_NOT_FOUND`, `ENTRY_NOT_FOUND` |
-| 409 | `ALREADY_IN_QUEUE`, `BARBER_BUSY`, `INVALID_TRANSITION`, `NO_BARBER_AVAILABLE`, `SHOP_CLOSED`, `SLOT_TAKEN`, `SLOT_UNAVAILABLE`, `ALREADY_BOOKED` |
+| 409 | `ALREADY_HAS_SHOP`, `SLUG_TAKEN`, `ALREADY_IN_QUEUE`, `BARBER_BUSY`, `INVALID_TRANSITION`, `NO_BARBER_AVAILABLE`, `SHOP_CLOSED`, `SLOT_TAKEN`, `SLOT_UNAVAILABLE`, `ALREADY_BOOKED` |
 | 500 | `INTERNAL_ERROR` |
 
 ## `GET /api/shops/:shopId/queue`
@@ -235,6 +235,84 @@ change the entry.
 - **200:** the updated tracking status (`state: "CANCELLED"`).
 
 **Errors:** 400 invalid code · 404 `ENTRY_NOT_FOUND` · 409 `INVALID_TRANSITION`.
+
+## Accounts and onboarding
+
+### Sign-up, sign-in, verification, password reset
+
+These are Better Auth endpoints under `/api/auth/*` (the app calls them through
+[`app/utils/auth-client.ts`](../app/utils/auth-client.ts)). Their errors use Better Auth's
+shape, not the envelope above.
+
+- **Sign-up** (`POST /api/auth/sign-up/email`) is open to anyone. Passwords need 8+ characters.
+  No session is created: a verification link is emailed first.
+- **Sign-in** (`POST /api/auth/sign-in/email`) of an unverified account returns 403
+  `EMAIL_NOT_VERIFIED` and emails a fresh link. Opening the link verifies the email and signs in.
+- **Password reset** (`POST /api/auth/request-password-reset`) always returns 200, whether or not
+  the email exists. The link leads to `/reset-password?token=…`; resetting signs out every
+  existing session.
+- Links are valid for 1 hour.
+- **Rate limits** are per client IP (sign-in: a few attempts per 10 s, then 429). The IP is the
+  socket address, or the first `X-Forwarded-For` hop when `TRUST_PROXY=true`. Set that only
+  behind a proxy you control, or the header can be spoofed.
+- **Email delivery** is `EMAIL_PROVIDER=console` (printed in the server log) for now; `file`
+  appends JSON lines to `EMAIL_FILE_PATH` for tests. Production needs a real provider before
+  real users can verify.
+
+Every other endpoint that needs a signed-in user also requires a verified email
+(403 `EMAIL_NOT_VERIFIED`).
+
+### `GET /api/me`
+
+- **Auth:** signed in.
+- **200:** `{ "data": { "user": { "id", "name", "email" }, "shop": ShopProfile | null } }`.
+  `shop` is null until onboarding is done.
+
+**Errors:** 401 `UNAUTHENTICATED` · 403 `EMAIL_NOT_VERIFIED`.
+
+### `GET /api/onboarding/slug?slug=…`
+
+Whether a customer link name is free.
+
+- **Auth:** signed in.
+- **200:** `{ "data": { "slug": "faisal-barber", "available": true } }`.
+
+**Errors:** 400 `VALIDATION_ERROR` (3–40 lowercase letters, digits or dashes) · 401 · 403.
+
+### `POST /api/onboarding/shop`
+
+Create the signed-in user's shop. The owner is always the session user; the body can't name one.
+In one transaction it creates the shop, its first barber and default opening hours
+(Mon–Sat 09:00–13:00 and 14:00–20:00, Sunday closed).
+
+- **Auth:** signed in, without a shop.
+- **Body** (strict): `{ "name", "slug", "timezone" (IANA), "currency" (ISO 4217), "barberName" }`.
+- **201:** the shop profile.
+
+**Errors:** 400 `VALIDATION_ERROR` · 401 · 403 `EMAIL_NOT_VERIFIED` · 409 `ALREADY_HAS_SHOP` · 409 `SLUG_TAKEN`.
+
+## Managing services (owner)
+
+Types: `ManagedServiceDto` in [`shared/types/dashboard.ts`](../shared/types/dashboard.ts); schemas in
+[`shared/schemas/service.ts`](../shared/schemas/service.ts).
+
+### `GET /api/dashboard/services`
+
+All the shop's services, active first: `[{ "id", "name", "durationMinutes", "priceMinor", "isActive" }]`.
+
+### `POST /api/dashboard/services`
+
+- **Body** (strict): `{ "name" (1–60), "durationMinutes" (5–480), "priceMinor" (0–10,000,000) }`.
+- **201:** the new service.
+
+### `PATCH /api/dashboard/services/:id`
+
+- **Body** (strict): any of `name`, `durationMinutes`, `priceMinor`, `isActive` (at least one).
+  `isActive: false` archives the service: customers can't choose it, past visits keep it.
+- **200:** the updated service.
+
+**Errors (all three):** 400 `VALIDATION_ERROR` · 401 · 403 `FORBIDDEN` · 404 `SERVICE_NOT_FOUND`
+(including another shop's service).
 
 ## Shops and services
 
@@ -498,4 +576,5 @@ Shop feed (owner only) and one customer's feed (the tracking code is the credent
 ## Tests
 
 `pnpm test:api` builds the app (into `.nuxt-test`, so it can run beside `pnpm dev`), starts it against the `_test` database and calls every
-endpoint over HTTP (see [`server/testing/api/queue.api.test.ts`](../server/testing/api/queue.api.test.ts)).
+endpoint over HTTP (see [`server/testing/api/`](../server/testing/api/)). Auth emails go to a temporary file,
+and the tests follow the emailed links.

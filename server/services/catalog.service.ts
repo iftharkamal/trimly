@@ -1,7 +1,8 @@
 // The "services" module (haircut, beard, ...). Named catalog to avoid services/services.ts.
-import { and, asc, eq } from 'drizzle-orm'
+import { and, asc, desc, eq } from 'drizzle-orm'
 import { useDb } from '../db'
 import { services, shops } from '../db/schema'
+import type { CreateServiceBody, UpdateServiceBody } from '../../shared/schemas/service'
 import { DomainError } from './errors'
 
 export interface CatalogService {
@@ -40,6 +41,51 @@ export async function getActiveService(shopId: string, serviceId: string): Promi
   })
   if (!service) {
     throw new DomainError('SERVICE_NOT_FOUND', 404, 'Service not found or not available')
+  }
+  return service
+}
+
+export interface ManagedService extends CatalogService {
+  isActive: boolean
+}
+
+const MANAGED_COLUMNS = {
+  id: services.id,
+  name: services.name,
+  durationMinutes: services.durationMinutes,
+  priceMinor: services.priceMinor,
+  isActive: services.isActive
+}
+
+/** Every service of the shop, active first, for the owner to manage. */
+export function listManagedServices(shopId: string): Promise<ManagedService[]> {
+  return useDb()
+    .select(MANAGED_COLUMNS)
+    .from(services)
+    .where(eq(services.shopId, shopId))
+    .orderBy(desc(services.isActive), asc(services.priceMinor), asc(services.name))
+}
+
+export async function createService(shopId: string, input: CreateServiceBody): Promise<ManagedService> {
+  const [service] = await useDb().insert(services).values({ ...input, shopId }).returning(MANAGED_COLUMNS)
+  if (!service) {
+    throw new Error('Failed to create service')
+  }
+  return service
+}
+
+/**
+ * Updates a service of this shop only. Price and duration changes apply to
+ * new joins and bookings; existing ones keep what they were given.
+ */
+export async function updateService(shopId: string, serviceId: string, input: UpdateServiceBody): Promise<ManagedService> {
+  const [service] = await useDb()
+    .update(services)
+    .set(input)
+    .where(and(eq(services.id, serviceId), eq(services.shopId, shopId)))
+    .returning(MANAGED_COLUMNS)
+  if (!service) {
+    throw new DomainError('SERVICE_NOT_FOUND', 404, 'Service not found')
   }
   return service
 }

@@ -2,7 +2,7 @@
 import type { CreateAppointmentBody } from '#shared/schemas/appointment'
 import type { AppointmentDto } from '#shared/types/appointment'
 
-definePageMeta({ layout: 'dashboard', middleware: 'auth' })
+definePageMeta({ layout: 'dashboard', middleware: ['auth', 'shop'] })
 useHead({ title: 'Appointments · Trimly' })
 
 const VIEWS = ['today', 'calendar', 'upcoming', 'history'] as const

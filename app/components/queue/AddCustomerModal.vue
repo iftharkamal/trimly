@@ -144,7 +144,14 @@ function onSubmit(event: FormSubmitEvent<z.output<typeof formSchema>>) {
             v-else-if="!serviceItems.length"
             class="text-sm text-muted"
           >
-            No active services. Add services before adding customers.
+            No active services yet.
+            <ULink
+              to="/dashboard/services"
+              class="font-medium text-highlighted underline underline-offset-4"
+            >
+              Add a service
+            </ULink>
+            to start taking customers.
           </p>
           <URadioGroup
             v-else

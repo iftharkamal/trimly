@@ -14,10 +14,9 @@ const schema = z.object({
 })
 
 const state = reactive({ email: '', password: '' })
-// Lets people check what their keyboard actually typed.
-const showPassword = ref(false)
 const submitting = ref(false)
 const errorMessage = ref<string | null>(null)
+const notice = ref<string | null>(route.query.reset === '1' ? 'Password changed. Sign in with your new password.' : null)
 
 // Only same-site paths, so the login page can't be used to redirect elsewhere.
 function redirectTarget(): string {
@@ -30,10 +29,16 @@ function redirectTarget(): string {
 async function onSubmit(event: FormSubmitEvent<z.output<typeof schema>>) {
   submitting.value = true
   errorMessage.value = null
+  notice.value = null
 
   const { error } = await authClient.signIn.email(event.data)
   if (error) {
-    errorMessage.value = error.message ?? 'Could not sign in. Please try again.'
+    // Better Auth emails a fresh verification link on this attempt.
+    errorMessage.value = error.code === 'EMAIL_NOT_VERIFIED'
+      ? `Verify your email first. We've sent a new link to ${event.data.email}.`
+      : error.status === 429
+        ? 'Too many attempts. Wait a moment and try again.'
+        : error.message ?? 'Could not sign in. Please try again.'
     submitting.value = false
     return
   }
@@ -44,99 +49,86 @@ async function onSubmit(event: FormSubmitEvent<z.output<typeof schema>>) {
 </script>
 
 <template>
-  <div class="relative grid min-h-dvh place-items-center px-4">
-    <UColorModeButton
-      size="sm"
-      class="absolute top-3 right-3"
+  <AuthShell
+    title="Sign in"
+    description="Manage your shop's queue, bookings and payments."
+  >
+    <UAlert
+      v-if="notice"
+      color="success"
+      variant="subtle"
+      icon="i-lucide-circle-check"
+      :title="notice"
+      class="mb-5"
     />
-    <div class="w-full max-w-sm">
-      <div class="mb-6 flex items-center justify-center gap-2 text-lg font-semibold text-highlighted">
-        <UIcon
-          name="i-lucide-scissors"
-          class="size-6 text-primary"
+    <UAlert
+      v-if="errorMessage"
+      color="error"
+      variant="subtle"
+      icon="i-lucide-circle-alert"
+      :title="errorMessage"
+      class="mb-5"
+    />
+
+    <UForm
+      :schema="schema"
+      :state="state"
+      class="space-y-4"
+      @submit="onSubmit"
+    >
+      <UFormField
+        label="Email"
+        name="email"
+      >
+        <UInput
+          v-model="state.email"
+          type="email"
+          inputmode="email"
+          autocomplete="email"
+          autocapitalize="none"
+          autocorrect="off"
+          spellcheck="false"
+          size="xl"
+          class="w-full"
+          autofocus
         />
-        Trimly
-      </div>
+      </UFormField>
 
-      <UCard :ui="{ body: 'p-6' }">
-        <h1 class="text-xl font-semibold text-highlighted">
-          Sign in
-        </h1>
-        <p class="mt-1 text-sm text-muted">
-          Manage your shop's live queue.
-        </p>
-
-        <UAlert
-          v-if="errorMessage"
-          color="error"
-          variant="subtle"
-          icon="i-lucide-circle-alert"
-          :title="errorMessage"
-          class="mt-5"
+      <UFormField
+        label="Password"
+        name="password"
+      >
+        <template #hint>
+          <NuxtLink
+            to="/forgot-password"
+            class="text-muted hover:text-highlighted"
+          >
+            Forgot password?
+          </NuxtLink>
+        </template>
+        <PasswordInput
+          v-model="state.password"
+          autocomplete="current-password"
         />
+      </UFormField>
 
-        <UForm
-          :schema="schema"
-          :state="state"
-          class="mt-5 space-y-4"
-          @submit="onSubmit"
-        >
-          <UFormField
-            label="Email"
-            name="email"
-          >
-            <UInput
-              v-model="state.email"
-              type="email"
-              inputmode="email"
-              autocomplete="email"
-              autocapitalize="none"
-              autocorrect="off"
-              spellcheck="false"
-              size="lg"
-              class="w-full"
-              autofocus
-            />
-          </UFormField>
+      <UButton
+        type="submit"
+        label="Sign in"
+        size="xl"
+        block
+        :loading="submitting"
+      />
+    </UForm>
 
-          <UFormField
-            label="Password"
-            name="password"
-          >
-            <UInput
-              v-model="state.password"
-              :type="showPassword ? 'text' : 'password'"
-              autocomplete="current-password"
-              autocapitalize="none"
-              autocorrect="off"
-              spellcheck="false"
-              size="lg"
-              class="w-full"
-              :ui="{ trailing: 'pe-1' }"
-            >
-              <template #trailing>
-                <UButton
-                  :icon="showPassword ? 'i-lucide-eye-off' : 'i-lucide-eye'"
-                  :aria-label="showPassword ? 'Hide password' : 'Show password'"
-                  :aria-pressed="showPassword"
-                  color="neutral"
-                  variant="link"
-                  size="sm"
-                  @click="showPassword = !showPassword"
-                />
-              </template>
-            </UInput>
-          </UFormField>
-
-          <UButton
-            type="submit"
-            label="Sign in"
-            size="lg"
-            block
-            :loading="submitting"
-          />
-        </UForm>
-      </UCard>
-    </div>
-  </div>
+    <template #footer>
+      New to Trimly?
+      <NuxtLink
+        to="/signup"
+        class="font-medium text-highlighted underline-offset-2 hover:underline"
+      >
+        Create an account
+      </NuxtLink>
+    </template>
+  </AuthShell>
 </template>

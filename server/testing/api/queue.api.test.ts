@@ -1,7 +1,7 @@
 // Every queue endpoint over real HTTP against the built server (see api-server.ts).
 import { randomUUID } from 'node:crypto'
 import { eq } from 'drizzle-orm'
-import { beforeAll, beforeEach, describe, expect, inject, it } from 'vitest'
+import { beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import type {
   JoinQueueResultDto,
   OwnerShopQueueDto,
@@ -11,48 +11,7 @@ import type {
 import { useDb } from '../../db'
 import { payments, queueEntries } from '../../db/schema'
 import { createShopFixture, resetDatabase, resetShopData, type ShopFixture } from '../fixtures'
-
-const baseUrl = inject('apiBaseUrl')
-
-interface ApiResponse {
-  status: number
-  // Arbitrary JSON; each test asserts the parts it cares about.
-  json: any
-}
-
-async function request(
-  method: 'GET' | 'POST' | 'PATCH' | 'PUT',
-  path: string,
-  options: { body?: unknown, rawBody?: string, cookie?: string } = {}
-): Promise<ApiResponse> {
-  const headers: Record<string, string> = { origin: baseUrl }
-  if (options.cookie) {
-    headers.cookie = options.cookie
-  }
-  if (options.body !== undefined || options.rawBody !== undefined) {
-    headers['content-type'] = 'application/json'
-  }
-
-  const response = await fetch(`${baseUrl}${path}`, {
-    method,
-    headers,
-    body: options.rawBody ?? (options.body === undefined ? undefined : JSON.stringify(options.body))
-  })
-  return { status: response.status, json: await response.json() }
-}
-
-async function signUp(email: string): Promise<{ userId: string, cookie: string }> {
-  const response = await fetch(`${baseUrl}/api/auth/sign-up/email`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', origin: baseUrl },
-    body: JSON.stringify({ name: 'Test User', email, password: 'correct-horse-battery' })
-  })
-  expect(response.status).toBe(200)
-  const body = await response.json() as { user: { id: string } }
-  const cookie = response.headers.getSetCookie().map(value => value.split(';')[0]).join('; ')
-  expect(cookie).toContain('session_token')
-  return { userId: body.user.id, cookie }
-}
+import { expectError, request, signUp, type ApiResponse } from './http'
 
 let owner: { userId: string, cookie: string }
 let outsider: { userId: string, cookie: string }
@@ -79,11 +38,6 @@ function walkIn(name: string, serviceId = shop.services.beard) {
 
 function act(action: 'start' | 'complete' | 'cancel' | 'no-show', entryId: string, cookie = owner.cookie) {
   return request('POST', `/api/queue/${entryId}/${action}`, { cookie })
-}
-
-function expectError(response: ApiResponse, status: number, code: string) {
-  expect(response.status).toBe(status)
-  expect(response.json).toEqual({ error: expect.objectContaining({ code, message: expect.any(String) }) })
 }
 
 describe('GET /api/shops/:shopId/queue', () => {

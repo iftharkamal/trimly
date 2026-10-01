@@ -14,6 +14,9 @@ export type DomainErrorCode =
   | 'ALREADY_BOOKED'
   | 'INVALID_TIME'
   | 'SLOT_UNAVAILABLE'
+  | 'ALREADY_HAS_SHOP'
+  | 'SLUG_TAKEN'
+  | 'EMAIL_NOT_VERIFIED'
 
 /**
  * An expected business-rule failure. Services throw it without knowing about

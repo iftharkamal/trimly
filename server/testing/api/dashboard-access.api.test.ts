@@ -92,9 +92,26 @@ describe('dashboard access', () => {
 describe('where signed-in people are sent', () => {
   it('sends an account without a shop to onboarding, and an owner away from it', async () => {
     const { cookie } = await signUp(`access-new-${randomUUID().slice(0, 8)}@trimly.test`)
-    expect(await page('/dashboard', cookie)).toMatchObject({ status: 302, location: '/onboarding' })
-    expect((await page('/onboarding', cookie)).status).toBe(200)
-    expect(await page('/onboarding', owner.cookie)).toMatchObject({ status: 302, location: '/dashboard' })
+    expect(await page('/dashboard', cookie)).toMatchObject({ status: 302, location: '/onboarding/shop' })
+    expect((await page('/onboarding/shop', cookie)).status).toBe(200)
+    expect(await page('/onboarding/shop', owner.cookie)).toMatchObject({ status: 302, location: '/dashboard' })
+  })
+
+  it('shows the shop setup form to an account without a shop', async () => {
+    const { cookie } = await signUp(`access-setup-${randomUUID().slice(0, 8)}@trimly.test`)
+    const response = await page('/onboarding/shop', cookie)
+
+    expect(response.status).toBe(200)
+    for (const text of ['Welcome to Trimly', 'Let&#39;s set up your barber shop.', 'Shop name', 'Phone', 'Address', 'Currency', 'Create Shop']) {
+      expect(response.html, text).toContain(text)
+    }
+    // Every field has a label tied to its input.
+    for (const label of ['Shop name', 'Phone', 'Address']) {
+      const id = new RegExp(`<label[^>]*for="([^"]+)"[^>]*>\\s*(?:<[^>]+>\\s*)*${label}`).exec(response.html)?.[1]
+      expect(id && response.html.includes(`id="${id}"`), label).toBe(true)
+    }
+    expectLoginRedirect(await page('/onboarding/shop'), '/onboarding/shop')
+    expect(await page('/onboarding', cookie)).toMatchObject({ status: 307, location: '/onboarding/shop' })
   })
 
   it('sends signed-in people away from the login and sign-up pages', async () => {

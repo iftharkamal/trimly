@@ -89,7 +89,7 @@ describe('creating a shop', () => {
     const { cookie } = await signUp(uniqueEmail('creator'))
     const created = await request('POST', '/api/onboarding/shop', {
       cookie,
-      body: { name: 'Kochi Cuts', slug: slug('kochi'), timezone: 'Asia/Kolkata', currency: 'INR', barberName: 'Arjun' }
+      body: { name: 'Kochi Cuts', phone: '98765 43210', currency: 'INR' }
     })
     expect(created.status).toBe(201)
     expect((await request('GET', '/api/me', { cookie })).json.data).toMatchObject({ role: 'OWNER', shop: { id: created.json.data.id }, memberships: [{ role: 'OWNER' }] })
@@ -102,7 +102,7 @@ describe('creating a shop', () => {
 
     expectError(await request('POST', '/api/onboarding/shop', {
       cookie: barber.cookie,
-      body: { name: 'My Own', slug: slug('own'), timezone: 'Asia/Kolkata', currency: 'INR', barberName: 'Me' }
+      body: { name: 'My Own', phone: '98765 43210', currency: 'INR' }
     }), 409, 'ALREADY_HAS_SHOP')
   })
 })

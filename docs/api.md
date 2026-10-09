@@ -29,8 +29,11 @@ request schemas are in [`shared/schemas/queue.ts`](../shared/schemas/queue.ts).
 `details` is only present for `VALIDATION_ERROR`.
 
 - **Dates** are ISO 8601 strings in UTC. **Money** is integer minor units (paise for INR).
-- **Auth** is the Better Auth session cookie (sign in via `/api/auth/*`). "Owner" means the
-  signed-in user owns the shop in question.
+- **Auth** is the Better Auth session cookie (sign in via `/api/auth/*`, by email or phone
+  code). Shop access comes from the user's **membership** (`shop_members`): **"owner only"**
+  means role `OWNER`; **"member"** means any role (`OWNER` or `BARBER`). The shop is always taken
+  from the session's membership, never from the request. See
+  [Roles](#roles-and-who-can-do-what).
 - **Other websites** can't change anything: a `POST`/`PUT`/`PATCH`/`DELETE` whose `Origin` header
   isn't this app (same host, `BETTER_AUTH_URL`, or `BETTER_AUTH_TRUSTED_ORIGINS`) gets 403
   `FORBIDDEN_ORIGIN`. Requests without `Origin` (not from a browser) are allowed; auth still
@@ -40,7 +43,7 @@ request schemas are in [`shared/schemas/queue.ts`](../shared/schemas/queue.ts).
 |---|---|
 | 400 | `VALIDATION_ERROR`, `BAD_REQUEST` (e.g. malformed JSON), `PHONE_REQUIRED` |
 | 401 | `UNAUTHENTICATED` — no valid session |
-| 403 | `FORBIDDEN` — signed in, but the account doesn't manage a shop · `EMAIL_NOT_VERIFIED` · `FORBIDDEN_ORIGIN` — sent by another website |
+| 403 | `FORBIDDEN` — signed in, but not a member of the shop · `INSUFFICIENT_ROLE` — a member whose role can't do this · `ACCOUNT_NOT_VERIFIED` · `FORBIDDEN_ORIGIN` — sent by another website |
 | 404 | `SHOP_NOT_FOUND`, `SERVICE_NOT_FOUND`, `BARBER_NOT_FOUND`, `ENTRY_NOT_FOUND` |
 | 409 | `ALREADY_HAS_SHOP`, `SLUG_TAKEN`, `ALREADY_IN_QUEUE`, `BARBER_BUSY`, `INVALID_TRANSITION`, `NO_BARBER_AVAILABLE`, `SHOP_CLOSED`, `SLOT_TAKEN`, `SLOT_UNAVAILABLE`, `ALREADY_BOOKED` |
 | 429 | `RATE_LIMITED` — too many public joins or bookings; see `Retry-After` |
@@ -50,8 +53,8 @@ request schemas are in [`shared/schemas/queue.ts`](../shared/schemas/queue.ts).
 
 The live queue for every barber in the shop.
 
-- **Auth:** none required. The owner gets `view: "owner"` (customer details included);
-  everyone else gets `view: "public"` (no names, phones or entry ids).
+- **Auth:** none required. A member of this shop gets `view: "owner"` (customer details
+  included); everyone else gets `view: "public"` (no names, phones or entry ids).
 - **Params:** `shopId` — UUID.
 
 **200 (owner view):**
@@ -180,7 +183,7 @@ phones share one address on mobile networks and shop Wi-Fi.
 | `POST /api/queue/:id/cancel` | `WAITING` or `IN_PROGRESS` → `CANCELLED` |
 | `POST /api/queue/:id/no-show` | `WAITING` → `NO_SHOW` |
 
-- **Auth:** owner only. The shop comes from the session; an entry from another shop is `404`.
+- **Auth:** member (owner or barber). The shop comes from the session; an entry from another shop is `404`.
 - **Params:** `id` — queue entry UUID. **Body:** none, except for `complete` (below).
 - **200:** the recalculated queue — the same shape as `GET /api/shops/:shopId/queue` (owner view).
 
@@ -260,11 +263,16 @@ change the entry.
 
 ## Accounts and onboarding
 
-### Sign-up, sign-in, verification, password reset
+One person is one Better Auth `user`, whichever way they sign in: email + password, a code
+texted to their phone, or both (a phone added to an email account). Sessions are server-side
+(`session` table + httpOnly cookie), last 30 days and are extended when used. Sign out with
+`POST /api/auth/sign-out`; `POST /api/auth/revoke-other-sessions` signs out every other device.
 
 These are Better Auth endpoints under `/api/auth/*` (the app calls them through
 [`app/utils/auth-client.ts`](../app/utils/auth-client.ts)). Their errors use Better Auth's
-shape, not the envelope above.
+shape (`{ "code", "message" }`), not the envelope above.
+
+### Email: sign-up, sign-in, verification, password reset
 
 - **Sign-up** (`POST /api/auth/sign-up/email`) is open to anyone. Passwords need 8+ characters.
   No session is created: a verification link is emailed first.
@@ -279,20 +287,70 @@ shape, not the envelope above.
   survive restarts and are shared by every server. The IP is the socket address, or the last
   `X-Forwarded-For` entry when `TRUST_PROXY=true` (exactly one proxy in front; see
   [production.md](production.md)).
-- **Email delivery** is `EMAIL_PROVIDER=console` (printed in the server log) for now; `file`
-  appends JSON lines to `EMAIL_FILE_PATH` for tests. Production needs a real provider before
-  real users can verify.
+- **Email delivery** is set by `EMAIL_PROVIDER`: `resend` (real inboxes; see
+  [production.md](production.md#email-with-resend)), `console` (printed in the server log; the
+  development default) or `file` (JSON lines in `EMAIL_FILE_PATH`, for tests).
+- Sign-up refuses `phoneNumber` in the body (400 `PHONE_NUMBER_NOT_EDITABLE`): a number is only
+  ever set by verifying a code.
 
-Every other endpoint that needs a signed-in user also requires a verified email
-(403 `EMAIL_NOT_VERIFIED`).
+### Phone: sign-in, sign-up and adding a number (OTP)
+
+1. `POST /api/auth/phone-number/send-otp` `{ "phoneNumber": "+919876543210" }` texts a 6-digit
+   code, valid 5 minutes. Numbers must be E.164 and in an allowed country
+   (`SMS_ALLOWED_COUNTRY_CODES`, default `+91`), else 400 `INVALID_PHONE_NUMBER`.
+2. `POST /api/auth/phone-number/verify` `{ "phoneNumber", "code" }`:
+   - the number belongs to an account → signs that account in;
+   - it doesn't → **creates** an account (OTP sign-up) and signs it in. Such accounts have no
+     email (an internal placeholder Trimly never sends to; `/api/me` reports `email: null`).
+     Set the name with `POST /api/auth/update-user` `{ "name" }`.
+   - with `"updatePhoneNumber": true` while signed in → adds or changes the number on the
+     **current** account instead (400 `PHONE_NUMBER_EXIST` if another account has it).
+
+| Error | When |
+|---|---|
+| 400 `INVALID_OTP` | wrong code (3 tries per code) |
+| 403 `TOO_MANY_ATTEMPTS` | a 4th try on the same code; send a new one |
+| 400 `OTP_EXPIRED` | older than 5 minutes |
+| 429 `TOO_MANY_CODES` | 3 codes per number per 15 min, 10 per day |
+| 429 | 3 code requests or 10 verifications per minute per client IP |
+| 503 `PHONE_SIGN_IN_UNAVAILABLE` | no SMS provider configured (production, for now) |
+
+Not offered: phone + password sign-in and password reset by phone (404). `POST /api/auth/update-user`
+refuses `phoneNumber` (400 `PHONE_NUMBER_NOT_EDITABLE`).
+
+**Texts** are sent by `SMS_PROVIDER`. Only a development sender exists today (`console`: codes
+printed in the server log, the default under `pnpm dev`; `file`: for the API tests). A production
+build never uses it, whatever the environment says, so phone sign-in is unavailable in production
+until a real provider is added (see [production.md](production.md)).
+
+Every other endpoint that needs a signed-in user requires a verified email **or** phone
+(403 `ACCOUNT_NOT_VERIFIED`; both sign-in methods already ensure it).
+
+### Roles and who can do what
+
+A shop's people are in `shop_members` (`shop_id`, `user_id`, `role`). The creator of a shop is its
+`OWNER`; `BARBER` members can't be added from the app yet. For now a person belongs to one shop.
+
+| Action | OWNER | BARBER |
+|---|---|---|
+| Queue, walk-ins, start/complete/cancel/no-show, payments | ✓ | ✓ |
+| Appointments (list, book, check in, cancel, no-show) | ✓ | ✓ |
+| `GET /api/dashboard`, `GET /api/dashboard/hours`, notifications | ✓ | ✓ |
+| Open/close the shop (`PATCH /api/dashboard/shop`) | ✓ | 403 `INSUFFICIENT_ROLE` |
+| Services (`/api/dashboard/services*`), `PUT /api/dashboard/hours` | ✓ | 403 `INSUFFICIENT_ROLE` |
+| Reports (`GET /api/reports`) | ✓ | 403 `INSUFFICIENT_ROLE` |
+
+Server helpers ([`server/utils/session.ts`](../server/utils/session.ts)): `getCurrentUser`,
+`requireUser` (401/403), `requireShopMember` (403 `FORBIDDEN`), `requireRole` (403
+`INSUFFICIENT_ROLE`) and `getShopMember` (for public routes with a member view).
 
 ### `GET /api/me`
 
 - **Auth:** signed in.
-- **200:** `{ "data": { "user": { "id", "name", "email" }, "shop": ShopProfile | null } }`.
-  `shop` is null until onboarding is done.
+- **200:** `{ "data": { "user": { "id", "name", "email" | null, "phoneNumber" | null }, "shop": ShopProfile | null, "role": "OWNER" | "BARBER" | null } }`.
+  `shop` and `role` are null until onboarding is done.
 
-**Errors:** 401 `UNAUTHENTICATED` · 403 `EMAIL_NOT_VERIFIED`.
+**Errors:** 401 `UNAUTHENTICATED` · 403 `ACCOUNT_NOT_VERIFIED`.
 
 ### `GET /api/onboarding/slug?slug=…`
 
@@ -306,14 +364,14 @@ Whether a customer link name is free.
 ### `POST /api/onboarding/shop`
 
 Create the signed-in user's shop. The owner is always the session user; the body can't name one.
-In one transaction it creates the shop, its first barber and default opening hours
+In one transaction it creates the shop, makes the user its `OWNER` member, and adds its first barber and default opening hours
 (Mon–Sat 09:00–13:00 and 14:00–20:00, Sunday closed).
 
 - **Auth:** signed in, without a shop.
 - **Body** (strict): `{ "name", "slug", "timezone" (IANA), "currency" (ISO 4217), "barberName" }`.
 - **201:** the shop profile.
 
-**Errors:** 400 `VALIDATION_ERROR` · 401 · 403 `EMAIL_NOT_VERIFIED` · 409 `ALREADY_HAS_SHOP` · 409 `SLUG_TAKEN`.
+**Errors:** 400 `VALIDATION_ERROR` · 401 · 403 `ACCOUNT_NOT_VERIFIED` · 409 `ALREADY_HAS_SHOP` · 409 `SLUG_TAKEN`.
 
 ## Managing services (owner)
 
@@ -362,14 +420,14 @@ The shop behind a `/shop/:slug` link.
 
 ### `GET /api/dashboard`
 
-- **Auth:** owner only.
+- **Auth:** member (owner or barber). `member` is who is signed in: `{ "name", "role" }`.
 - **200:**
 
 ```json
 {
   "data": {
     "shop": { "id": "5b0c…", "name": "Faisal Barber", "slug": "faisal-barber", "timezone": "Asia/Kolkata", "currency": "INR", "isOpen": true },
-    "owner": { "name": "Faisal" },
+    "member": { "name": "Faisal", "role": "OWNER" },
     "barbers": [{ "id": "a1f2…", "name": "Faisal" }],
     "today": { "customers": 4, "servicesCompleted": 1, "revenueMinor": 15000 }
   }
@@ -438,7 +496,7 @@ previous period, plus a revenue trend.
 
 ### `GET /api/dashboard/hours` · `PUT /api/dashboard/hours`
 
-Weekly hours for the shop, in shop time. **Auth:** owner only.
+Weekly hours for the shop, in shop time. **Auth:** `GET` member; `PUT` owner only.
 
 ```json
 { "days": [
@@ -483,7 +541,7 @@ joins the queue **ordered by their booked time** (ahead of walk-ins who joined a
 | `POST /api/dashboard/appointments/:id/cancel` | `BOOKED` → `CANCELLED`. **200** `AppointmentDto` |
 | `POST /api/dashboard/appointments/:id/no-show` | `BOOKED` → `NO_SHOW`. **200** `AppointmentDto` |
 
-- **Auth:** owner only. Omit `barberId` for "any barber" (the first free one at that time).
+- **Auth:** member (owner or barber). Omit `barberId` for "any barber" (the first free one at that time).
 - A barber can't be double-booked: overlapping active appointments are rejected by the
   database, even when two bookings arrive at once. Back-to-back bookings are fine.
 - One upcoming (`BOOKED`) appointment per customer per shop.
@@ -583,7 +641,7 @@ email as channels implementing `NotificationChannel.deliver()`.
 
 ### `GET /api/dashboard/notifications?after=N` · `GET /api/track/:trackingCode/notifications?after=N`
 
-Shop feed (owner only) and one customer's feed (the tracking code is the credential).
+Shop feed (members) and one customer's feed (the tracking code is the credential).
 
 ```json
 { "data": {

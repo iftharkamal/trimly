@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import type { MeDto } from '#shared/types/account'
+
 const route = useRoute()
 const { signingOut, signOut } = useSignOut()
 
@@ -28,13 +30,16 @@ const bell = computed(() => {
   }
 })
 
-const links = [
-  { label: 'Queue', to: '/dashboard', icon: 'i-lucide-list-ordered' },
-  { label: 'Appointments', to: '/dashboard/appointments', icon: 'i-lucide-calendar' },
-  { label: 'Services', to: '/dashboard/services', icon: 'i-lucide-tags' },
-  { label: 'Reports', to: '/dashboard/reports', icon: 'i-lucide-chart-column' },
-  { label: 'Settings', to: '/dashboard/settings', icon: 'i-lucide-settings' }
+// Loaded by the page guards; barbers don't get the owner-only pages.
+const { data: me } = useNuxtData<MeDto>('me')
+const allLinks = [
+  { label: 'Queue', to: '/dashboard', icon: 'i-lucide-list-ordered', ownerOnly: false },
+  { label: 'Appointments', to: '/dashboard/appointments', icon: 'i-lucide-calendar', ownerOnly: false },
+  { label: 'Services', to: '/dashboard/services', icon: 'i-lucide-tags', ownerOnly: true },
+  { label: 'Reports', to: '/dashboard/reports', icon: 'i-lucide-chart-column', ownerOnly: true },
+  { label: 'Settings', to: '/dashboard/settings', icon: 'i-lucide-settings', ownerOnly: false }
 ]
+const links = computed(() => allLinks.filter(link => !link.ownerOnly || me.value?.role === 'OWNER'))
 </script>
 
 <template>

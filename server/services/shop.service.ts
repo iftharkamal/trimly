@@ -5,15 +5,7 @@ import { isUniqueViolation } from '../db/errors'
 import { shopHours, shops } from '../db/schema'
 import { createBarber } from './barber.service'
 import { DomainError } from './errors'
-
-/** The shop a user owns (MVP: at most one), or null. */
-export async function findShopIdByOwner(userId: string): Promise<string | null> {
-  const shop = await useDb().query.shops.findFirst({
-    where: eq(shops.ownerUserId, userId),
-    columns: { id: true }
-  })
-  return shop?.id ?? null
-}
+import { addMember } from './membership.service'
 
 export interface ShopProfile {
   id: string
@@ -125,17 +117,17 @@ export async function isSlugAvailable(slug: string): Promise<boolean> {
 }
 
 /**
- * Creates the owner's shop with its first barber and default opening hours,
- * in one transaction. The database enforces one shop per owner and unique
- * link names, so two requests at once can't create two shops.
+ * Creates a shop with the user as its OWNER member, its first barber and
+ * default opening hours, in one transaction. The database enforces one shop
+ * per person (shop_members) and unique link names, so two requests at once
+ * can't create two shops.
  */
-export async function createShopForOwner(input: NewShopInput): Promise<ShopProfile> {
+export async function createShopWithOwner(input: NewShopInput): Promise<ShopProfile> {
   try {
     const shopId = await useDb().transaction(async (tx) => {
       const [shop] = await tx
         .insert(shops)
         .values({
-          ownerUserId: input.ownerUserId,
           name: input.name,
           slug: input.slug,
           timezone: input.timezone,
@@ -145,6 +137,7 @@ export async function createShopForOwner(input: NewShopInput): Promise<ShopProfi
       if (!shop) {
         throw new Error('Failed to create shop')
       }
+      await addMember(tx, { shopId: shop.id, userId: input.ownerUserId, role: 'OWNER' })
       await createBarber(tx, shop.id, input.barberName)
       await tx.insert(shopHours).values(DEFAULT_OPENING_HOURS.map(hours => ({ ...hours, shopId: shop.id })))
       return shop.id
@@ -152,7 +145,7 @@ export async function createShopForOwner(input: NewShopInput): Promise<ShopProfi
     return await getShopProfile(shopId)
   }
   catch (error) {
-    if (isUniqueViolation(error, 'shops_owner_user_id_unique')) {
+    if (isUniqueViolation(error, 'shop_members_user_id_unique')) {
       throw new DomainError('ALREADY_HAS_SHOP', 409, 'This account already has a shop')
     }
     if (isUniqueViolation(error, 'shops_slug_unique')) {

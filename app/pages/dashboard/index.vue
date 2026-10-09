@@ -42,7 +42,7 @@ const greeting = computed(() => {
   if (!dashboard.value) {
     return ''
   }
-  const firstName = dashboard.value.owner.name.trim().split(/\s+/)[0]
+  const firstName = dashboard.value.member.name.trim().split(/\s+/)[0]
   return `${greetingFor(new Date(), timeZone.value)}, ${firstName}`
 })
 
@@ -190,9 +190,9 @@ async function onConfirm() {
             v-if="dashboard"
             :model-value="dashboard.shop.isOpen"
             :loading="updatingOpen"
-            :disabled="updatingOpen"
+            :disabled="updatingOpen || dashboard.member.role !== 'OWNER'"
             :label="dashboard.shop.isOpen ? 'Open' : 'Closed'"
-            description="Online joining"
+            :description="dashboard.member.role === 'OWNER' ? 'Online joining' : 'Online joining (the owner switches this)'"
             @update:model-value="value => setOpen(value)"
           />
           <UButton

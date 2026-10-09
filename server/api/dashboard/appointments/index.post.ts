@@ -3,9 +3,9 @@ import type { AppointmentDto } from '../../../../shared/types/appointment'
 import { toAppointmentDto } from '../../../services/appointment.dto'
 import { createAppointment } from '../../../services/appointment.service'
 
-// Shop owner only: the barber books an appointment.
+// Any member of the shop (owner or barber): the barber books an appointment.
 export default defineApiHandler(async (event): Promise<AppointmentDto> => {
-  const { shopId } = await requireShopOwner(event)
+  const { shopId } = await requireShopMember(event)
   const body = await parseBody(event, createAppointmentBodySchema)
 
   const appointment = await createAppointment({

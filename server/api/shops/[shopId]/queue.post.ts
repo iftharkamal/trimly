@@ -3,12 +3,12 @@ import type { JoinQueueResultDto } from '../../../../shared/types/queue'
 import { toQueueEntryStatusDto } from '../../../services/queue/queue.dto'
 import { addCustomer } from '../../../services/queue/queue.service'
 
-// Public: an online join (phone required, rate limited). Shop owner: a walk-in (phone optional).
+// Public: an online join (phone required, rate limited). A member of this shop: a walk-in (phone optional).
 export default defineApiHandler(async (event): Promise<JoinQueueResultDto> => {
   const { shopId } = parseParams(event, shopIdParamsSchema)
   const body = await parseBody(event, joinQueueBodySchema)
-  const isOwner = await isShopOwner(event, shopId)
-  if (!isOwner) {
+  const isMember = (await getShopMember(event, shopId)) !== null
+  if (!isMember) {
     await enforcePublicLimits(event, 'queue-join', shopId, body.phone ?? null)
   }
 
@@ -17,7 +17,7 @@ export default defineApiHandler(async (event): Promise<JoinQueueResultDto> => {
     customer: { name: body.name, phone: body.phone ?? null },
     serviceId: body.serviceId,
     barberId: body.barberId ?? null,
-    source: isOwner ? 'WALK_IN' : 'ONLINE'
+    source: isMember ? 'WALK_IN' : 'ONLINE'
   })
 
   setResponseStatus(event, 201)

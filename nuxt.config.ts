@@ -1,4 +1,10 @@
 // https://nuxt.com/docs/api/configuration/nuxt-config
+
+// The API tests' build (TRIMLY_TEST_BUILD=true, see server/testing/api-server.ts):
+// the development SMS sender is allowed in it, so it goes to its own output
+// directory and can't be mistaken for a deployable build.
+const isTestBuild = process.env.TRIMLY_TEST_BUILD === 'true'
+
 export default defineNuxtConfig({
   compatibilityDate: '2025-07-15',
   devtools: { enabled: true },
@@ -38,6 +44,11 @@ export default defineNuxtConfig({
   },
 
   nitro: {
+    // Fixed at build time, so no runtime environment variable can turn it on (server/services/sms/dev-sms.ts).
+    replace: {
+      'process.env.TRIMLY_TEST_BUILD': JSON.stringify(isTestBuild ? 'true' : '')
+    },
+    ...(isTestBuild ? { output: { dir: '.output-test' } } : {}),
     experimental: {
       tasks: true
     },

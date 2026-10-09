@@ -1,12 +1,13 @@
 import { sql } from 'drizzle-orm'
 import { useDb } from '../db'
-import { barbers, services, shops, user } from '../db/schema'
+import type { MemberRole } from '../../shared/constants'
+import { barbers, services, shopMembers, shops, user } from '../db/schema'
 
 /** Empties every table. Only ever called against the `_test` database. */
 export async function resetDatabase() {
   await useDb().execute(sql`
     truncate table payments, queue_entries, customers, services, barbers, shops,
-      session, account, verification, "user", rate_limit, request_limits
+      session, account, verification, "user", rate_limit, request_limits, shop_members
     cascade
   `)
 }
@@ -14,7 +15,7 @@ export async function resetDatabase() {
 /** Empties the shop and queue tables but keeps users and sessions. */
 export async function resetShopData() {
   await useDb().execute(sql`
-    truncate table payments, queue_entries, customers, services, barbers, shops cascade
+    truncate table payments, queue_entries, customers, services, barbers, shop_members, shops cascade
   `)
 }
 
@@ -50,7 +51,6 @@ export async function createShopFixture(
   const [shop] = await db
     .insert(shops)
     .values({
-      ownerUserId,
       name: 'Test Barber',
       slug,
       timezone: 'Asia/Kolkata',
@@ -58,6 +58,7 @@ export async function createShopFixture(
       serviceBufferMinutes: bufferMinutes
     })
     .returning({ id: shops.id })
+  await addMemberFixture(shop!.id, ownerUserId, 'OWNER')
   const [barber] = await db
     .insert(barbers)
     .values({ shopId: shop!.id, name: 'Faisal' })
@@ -77,4 +78,9 @@ export async function createShopFixture(
     bufferMinutes,
     services: { haircut: haircut!.id, beard: beard!.id, haircutAndBeard: haircutAndBeard!.id }
   }
+}
+
+/** Puts a user in a shop with a role (there is no invitation flow yet). */
+export async function addMemberFixture(shopId: string, userId: string, role: MemberRole) {
+  await useDb().insert(shopMembers).values({ shopId, userId, role })
 }

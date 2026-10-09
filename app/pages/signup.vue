@@ -45,6 +45,17 @@ async function resend() {
   resending.value = false
   resent.value = true
 }
+
+// Phone sign-up is verified by the code itself: straight on to shop setup.
+async function afterPhoneSignUp() {
+  clearNuxtData()
+  await navigateTo('/onboarding')
+}
+
+const methods = [
+  { label: 'Email', icon: 'i-lucide-mail', slot: 'email' as const },
+  { label: 'Phone', icon: 'i-lucide-smartphone', slot: 'phone' as const }
+]
 </script>
 
 <template>
@@ -103,61 +114,76 @@ async function resend() {
       class="mb-5"
     />
 
-    <UForm
-      :schema="schema"
-      :state="state"
-      class="space-y-4"
-      @submit="onSubmit"
+    <UTabs
+      :items="methods"
+      class="w-full"
+      :ui="{ list: 'mb-5' }"
     >
-      <UFormField
-        label="Your name"
-        name="name"
-      >
-        <UInput
-          v-model="state.name"
-          autocomplete="name"
-          size="xl"
-          class="w-full"
-          autofocus
+      <template #phone>
+        <PhoneOtpForm
+          mode="sign-up"
+          @done="afterPhoneSignUp"
         />
-      </UFormField>
+      </template>
 
-      <UFormField
-        label="Email"
-        name="email"
-      >
-        <UInput
-          v-model="state.email"
-          type="email"
-          inputmode="email"
-          autocomplete="email"
-          autocapitalize="none"
-          autocorrect="off"
-          spellcheck="false"
-          size="xl"
-          class="w-full"
-        />
-      </UFormField>
+      <template #email>
+        <UForm
+          :schema="schema"
+          :state="state"
+          class="space-y-4"
+          @submit="onSubmit"
+        >
+          <UFormField
+            label="Your name"
+            name="name"
+          >
+            <UInput
+              v-model="state.name"
+              autocomplete="name"
+              size="xl"
+              class="w-full"
+              autofocus
+            />
+          </UFormField>
 
-      <UFormField
-        label="Password"
-        name="password"
-        help="At least 8 characters."
-      >
-        <PasswordInput
-          v-model="state.password"
-          autocomplete="new-password"
-        />
-      </UFormField>
+          <UFormField
+            label="Email"
+            name="email"
+          >
+            <UInput
+              v-model="state.email"
+              type="email"
+              inputmode="email"
+              autocomplete="email"
+              autocapitalize="none"
+              autocorrect="off"
+              spellcheck="false"
+              size="xl"
+              class="w-full"
+            />
+          </UFormField>
 
-      <UButton
-        type="submit"
-        label="Create account"
-        size="xl"
-        block
-        :loading="submitting"
-      />
-    </UForm>
+          <UFormField
+            label="Password"
+            name="password"
+            help="At least 8 characters."
+          >
+            <PasswordInput
+              v-model="state.password"
+              autocomplete="new-password"
+            />
+          </UFormField>
+
+          <UButton
+            type="submit"
+            label="Create account"
+            size="xl"
+            block
+            :loading="submitting"
+          />
+        </UForm>
+      </template>
+    </UTabs>
 
     <template #footer>
       Already have an account?

@@ -46,6 +46,17 @@ async function onSubmit(event: FormSubmitEvent<z.output<typeof schema>>) {
   clearNuxtData()
   await navigateTo(redirectTarget())
 }
+
+// Phone sign-in creates the session itself (and the account, for a new number).
+async function afterPhoneSignIn() {
+  clearNuxtData()
+  await navigateTo(redirectTarget())
+}
+
+const methods = [
+  { label: 'Email', icon: 'i-lucide-mail', slot: 'email' as const },
+  { label: 'Phone', icon: 'i-lucide-smartphone', slot: 'phone' as const }
+]
 </script>
 
 <template>
@@ -70,56 +81,71 @@ async function onSubmit(event: FormSubmitEvent<z.output<typeof schema>>) {
       class="mb-5"
     />
 
-    <UForm
-      :schema="schema"
-      :state="state"
-      class="space-y-4"
-      @submit="onSubmit"
+    <UTabs
+      :items="methods"
+      class="w-full"
+      :ui="{ list: 'mb-5' }"
     >
-      <UFormField
-        label="Email"
-        name="email"
-      >
-        <UInput
-          v-model="state.email"
-          type="email"
-          inputmode="email"
-          autocomplete="email"
-          autocapitalize="none"
-          autocorrect="off"
-          spellcheck="false"
-          size="xl"
-          class="w-full"
-          autofocus
+      <template #phone>
+        <PhoneOtpForm
+          mode="sign-in"
+          @done="afterPhoneSignIn"
         />
-      </UFormField>
+      </template>
 
-      <UFormField
-        label="Password"
-        name="password"
-      >
-        <template #hint>
-          <NuxtLink
-            to="/forgot-password"
-            class="text-muted hover:text-highlighted"
+      <template #email>
+        <UForm
+          :schema="schema"
+          :state="state"
+          class="space-y-4"
+          @submit="onSubmit"
+        >
+          <UFormField
+            label="Email"
+            name="email"
           >
-            Forgot password?
-          </NuxtLink>
-        </template>
-        <PasswordInput
-          v-model="state.password"
-          autocomplete="current-password"
-        />
-      </UFormField>
+            <UInput
+              v-model="state.email"
+              type="email"
+              inputmode="email"
+              autocomplete="email"
+              autocapitalize="none"
+              autocorrect="off"
+              spellcheck="false"
+              size="xl"
+              class="w-full"
+              autofocus
+            />
+          </UFormField>
 
-      <UButton
-        type="submit"
-        label="Sign in"
-        size="xl"
-        block
-        :loading="submitting"
-      />
-    </UForm>
+          <UFormField
+            label="Password"
+            name="password"
+          >
+            <template #hint>
+              <NuxtLink
+                to="/forgot-password"
+                class="text-muted hover:text-highlighted"
+              >
+                Forgot password?
+              </NuxtLink>
+            </template>
+            <PasswordInput
+              v-model="state.password"
+              autocomplete="current-password"
+            />
+          </UFormField>
+
+          <UButton
+            type="submit"
+            label="Sign in"
+            size="xl"
+            block
+            :loading="submitting"
+          />
+        </UForm>
+      </template>
+    </UTabs>
 
     <template #footer>
       New to Trimly?

@@ -25,8 +25,29 @@ and **logs a warning** for the other problems below.
      `TRUST_PROXY=true`. The last entry is used; entries the client sent are ignored.
    - More than one proxy (e.g. Cloudflare → Nginx): not supported yet. Every client would share
      the outer proxy's address, and so one set of limits.
-6. **Email.** `EMAIL_PROVIDER` must be a real provider, or new users can't verify their email
-   and nobody can reset a password. Only `console` and `file` exist today.
+6. **Email.** `EMAIL_PROVIDER=resend`, with `RESEND_API_KEY` and `EMAIL_FROM` (the server won't
+   start without them). Otherwise new users can't verify their email and nobody can reset a
+   password. See [Email with Resend](#email-with-resend).
+
+7. **Phone sign-in.** Needs a real SMS provider, which isn't built yet. Until then leave
+   `SMS_PROVIDER` unset: phone sign-in answers 503 and people use email. The development
+   sender (`console`/`file`, which prints codes) can't run in a production build: that's
+   decided when the app is built, not by environment variables, and the server also refuses to
+   start if `SMS_PROVIDER` names it. In India, sending OTP texts needs DLT registration first.
+
+## Email with Resend
+
+1. Sign up at [resend.com](https://resend.com) (free: 3,000 emails/month, 100/day).
+2. **API Keys → Create API key** with "Sending access". Put it in `RESEND_API_KEY`.
+3. **Testing without a domain:** `EMAIL_FROM="Trimly <onboarding@resend.dev>"`. Resend then only
+   delivers to the email address you signed up to Resend with; anything else is refused (the
+   server log shows why).
+4. **Real users:** **Domains → Add domain** (e.g. `trimly.in`), add the DNS records Resend shows
+   at your domain registrar, wait until it says *Verified*, then send from it:
+   `EMAIL_FROM="Trimly <no-reply@trimly.in>"`.
+
+Sending happens in the background, so a failed email never slows down or breaks sign-up.
+Failures are logged with Resend's reason (e.g. "domain is not verified").
 
 ## What's limited, and where it's stored
 

@@ -1,6 +1,10 @@
 // Enum values shared by the database schema, Zod schemas and the UI.
 // Keep this file dependency-free: it is imported from both app/ and server/.
 
+// What a person can do in a shop (shop_members.role). RECEPTIONIST comes later.
+export const MEMBER_ROLES = ['OWNER', 'BARBER'] as const
+export type MemberRole = (typeof MEMBER_ROLES)[number]
+
 export const QUEUE_ENTRY_STATUSES = ['WAITING', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED', 'NO_SHOW'] as const
 export type QueueEntryStatus = (typeof QUEUE_ENTRY_STATUSES)[number]
 

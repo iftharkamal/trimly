@@ -5,8 +5,19 @@ definePageMeta({ layout: 'dashboard', middleware: ['auth', 'shop'] })
 useHead({ title: 'Settings · Trimly' })
 
 const { hours, error, refresh, saving, save } = await useOpeningHours()
-const { data: me } = await useMe()
+const { data: me, refresh: refreshMe } = await useMe()
 const toast = useToast()
+// Only the owner edits the opening hours (the server enforces it too).
+const isOwner = computed(() => me.value?.role === 'OWNER')
+
+// Add or change the number used for signing in with a code.
+const phoneModalOpen = ref(false)
+
+async function onPhoneVerified() {
+  phoneModalOpen.value = false
+  await refreshMe()
+  toast.add({ title: 'Mobile number verified', description: 'You can now sign in with a code texted to it.', color: 'success', icon: 'i-lucide-check' })
+}
 
 // Sign out of every other phone or computer (e.g. a lost phone); stay signed in here.
 const confirmSignOutOthers = ref(false)
@@ -49,72 +60,101 @@ async function onSave() {
       Settings
     </h1>
 
-    <UAlert
-      v-if="error && !hours"
-      color="error"
-      variant="subtle"
-      icon="i-lucide-circle-alert"
-      title="Couldn't load opening hours"
-      :description="getApiErrorMessage(error)"
-      :actions="[{ label: 'Try again', color: 'error', variant: 'outline', onClick: () => refresh() }]"
-    />
+    <template v-if="isOwner">
+      <UAlert
+        v-if="error && !hours"
+        color="error"
+        variant="subtle"
+        icon="i-lucide-circle-alert"
+        title="Couldn't load opening hours"
+        :description="getApiErrorMessage(error)"
+        :actions="[{ label: 'Try again', color: 'error', variant: 'outline', onClick: () => refresh() }]"
+      />
 
-    <UCard
-      v-else
-      :ui="{ body: 'px-4 py-2 sm:px-6' }"
-    >
-      <template #header>
-        <h2 class="font-semibold text-highlighted">
-          Opening hours
-        </h2>
-        <p class="mt-1 text-sm text-muted">
-          Online bookings are only offered inside these hours (shop time). The Open/Closed switch on the queue
-          still controls online queue joining.
-        </p>
-      </template>
-
-      <OpeningHoursEditor v-model="draft" />
-
-      <template #footer>
-        <div class="flex flex-wrap items-center justify-between gap-3">
-          <p
-            class="text-sm"
-            :class="problem ? 'text-error' : 'text-muted'"
-          >
-            {{ problem ?? (isDirty ? 'Unsaved changes' : 'All changes saved') }}
+      <UCard
+        v-else
+        :ui="{ body: 'px-4 py-2 sm:px-6' }"
+      >
+        <template #header>
+          <h2 class="font-semibold text-highlighted">
+            Opening hours
+          </h2>
+          <p class="mt-1 text-sm text-muted">
+            Online bookings are only offered inside these hours (shop time). The Open/Closed switch on the queue
+            still controls online queue joining.
           </p>
-          <div class="flex gap-2">
-            <UButton
-              v-if="isDirty"
-              label="Discard"
-              color="neutral"
-              variant="ghost"
-              :disabled="saving"
-              @click="draft = copy(hours)"
-            />
-            <UButton
-              label="Save hours"
-              :loading="saving"
-              :disabled="!isDirty || !!problem"
-              @click="onSave"
-            />
+        </template>
+
+        <OpeningHoursEditor v-model="draft" />
+
+        <template #footer>
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <p
+              class="text-sm"
+              :class="problem ? 'text-error' : 'text-muted'"
+            >
+              {{ problem ?? (isDirty ? 'Unsaved changes' : 'All changes saved') }}
+            </p>
+            <div class="flex gap-2">
+              <UButton
+                v-if="isDirty"
+                label="Discard"
+                color="neutral"
+                variant="ghost"
+                :disabled="saving"
+                @click="draft = copy(hours)"
+              />
+              <UButton
+                label="Save hours"
+                :loading="saving"
+                :disabled="!isDirty || !!problem"
+                @click="onSave"
+              />
+            </div>
           </div>
-        </div>
-      </template>
-    </UCard>
+        </template>
+      </UCard>
+    </template>
 
     <UCard>
       <template #header>
         <h2 class="font-semibold text-highlighted">
           Account
         </h2>
-        <p
-          v-if="me"
-          class="mt-1 break-all text-sm text-muted"
-        >
-          Signed in as {{ me.user.email }}
-        </p>
       </template>
+
+      <dl class="space-y-4 text-sm">
+        <div>
+          <dt class="text-muted">
+            Email
+          </dt>
+          <dd class="break-all font-medium text-highlighted">
+            {{ me?.user.email ?? 'Not added' }}
+          </dd>
+        </div>
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <dt class="text-muted">
+              Mobile number
+            </dt>
+            <dd class="font-medium text-highlighted">
+              {{ me?.user.phoneNumber ? formatIndianMobile(me.user.phoneNumber) : 'Not added' }}
+            </dd>
+            <p class="mt-0.5 text-xs text-muted">
+              Sign in with a code texted to it.
+            </p>
+          </div>
+          <UButton
+            :label="me?.user.phoneNumber ? 'Change' : 'Add number'"
+            icon="i-lucide-smartphone"
+            color="neutral"
+            variant="outline"
+            @click="phoneModalOpen = true"
+          />
+        </div>
+      </dl>
+
+      <USeparator class="my-5" />
 
       <div class="flex flex-wrap items-center justify-between gap-3">
         <p class="max-w-md text-sm text-muted">
@@ -129,6 +169,20 @@ async function onSave() {
         />
       </div>
     </UCard>
+
+    <UModal
+      v-model:open="phoneModalOpen"
+      :title="me?.user.phoneNumber ? 'Change mobile number' : 'Add a mobile number'"
+      description="We'll text a code to check it's yours."
+    >
+      <template #body>
+        <PhoneOtpForm
+          v-if="phoneModalOpen"
+          mode="add"
+          @done="onPhoneVerified"
+        />
+      </template>
+    </UModal>
 
     <ConfirmModal
       v-model:open="confirmSignOutOthers"

@@ -7,15 +7,21 @@ import { payments } from './payments'
 import { queueEntries } from './queue'
 import { services } from './services'
 import { shopHours } from './shop-hours'
+import { shopMembers } from './shop-members'
 import { shops } from './shops'
 
 export const shopsRelations = relations(shops, ({ one, many }) => ({
-  owner: one(user, { fields: [shops.ownerUserId], references: [user.id] }),
+  members: many(shopMembers),
   barbers: many(barbers),
   services: many(services),
   queueEntries: many(queueEntries),
   appointments: many(appointments),
   hours: many(shopHours)
+}))
+
+export const shopMembersRelations = relations(shopMembers, ({ one }) => ({
+  shop: one(shops, { fields: [shopMembers.shopId], references: [shops.id] }),
+  user: one(user, { fields: [shopMembers.userId], references: [user.id] })
 }))
 
 export const shopHoursRelations = relations(shopHours, ({ one }) => ({

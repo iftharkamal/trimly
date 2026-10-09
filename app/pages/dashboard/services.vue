@@ -2,7 +2,7 @@
 import type { CreateServiceBody } from '#shared/schemas/service'
 import type { ManagedServiceDto } from '#shared/types/dashboard'
 
-definePageMeta({ layout: 'dashboard', middleware: ['auth', 'shop'] })
+definePageMeta({ layout: 'dashboard', middleware: ['auth', 'shop', 'owner'] })
 useHead({ title: 'Services · Trimly' })
 
 const route = useRoute()

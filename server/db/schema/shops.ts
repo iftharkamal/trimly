@@ -1,17 +1,12 @@
 import { sql } from 'drizzle-orm'
 import { boolean, char, check, integer, pgTable, text, uuid } from 'drizzle-orm/pg-core'
-import { user } from './auth'
 import { timestamps } from './columns'
 
 export const shops = pgTable(
   'shops',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    // MVP: one shop per owner account.
-    ownerUserId: text('owner_user_id')
-      .notNull()
-      .unique()
-      .references(() => user.id),
+    // Owner and staff are in shop_members.
     name: text('name').notNull(),
     // Public URL segment: /shop/:slug
     slug: text('slug').notNull().unique(),

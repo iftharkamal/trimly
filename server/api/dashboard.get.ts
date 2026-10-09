@@ -4,14 +4,14 @@ import { getTodayRevenue } from '../services/payment.service'
 import { getTodayStats } from '../services/queue/queue.service'
 import { getShopProfile } from '../services/shop.service'
 
-// Shop owner only: the signed-in owner's shop and today's numbers.
+// Any member of the shop: their shop, who they are in it, and today's numbers.
 export default defineApiHandler(async (event): Promise<DashboardDto> => {
-  const { userName, shopId } = await requireShopOwner(event)
+  const { user, role, shopId } = await requireShopMember(event)
   const [shop, stats, revenueMinor, barbers] = await Promise.all([
     getShopProfile(shopId),
     getTodayStats(shopId),
     getTodayRevenue(shopId),
     listActiveBarbers(shopId)
   ])
-  return { shop, owner: { name: userName }, barbers, today: { ...stats, revenueMinor } }
+  return { shop, member: { name: user.name, role }, barbers, today: { ...stats, revenueMinor } }
 })

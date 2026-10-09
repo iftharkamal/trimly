@@ -1,10 +1,13 @@
 // Response shapes for the barber dashboard and the service catalog.
+import type { MemberRole } from '../constants'
 import type { ShopProfileDto } from './shop'
 
 export interface DashboardDto {
   shop: ShopProfileDto
-  owner: {
+  /** The signed-in member. */
+  member: {
     name: string
+    role: MemberRole
   }
   /** Barbers who can take customers (for booking and walk-ins). */
   barbers: { id: string, name: string }[]

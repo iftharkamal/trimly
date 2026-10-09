@@ -2,9 +2,9 @@ import { serviceParamsSchema, updateServiceBodySchema } from '../../../../shared
 import type { ManagedServiceDto } from '../../../../shared/types/dashboard'
 import { updateService } from '../../../services/catalog.service'
 
-// Shop owner only: edit or archive one of the shop's own services.
+// Shop OWNER only: edit or archive one of the shop's own services.
 export default defineApiHandler(async (event): Promise<ManagedServiceDto> => {
-  const { shopId } = await requireShopOwner(event)
+  const { shopId } = await requireRole(event, ['OWNER'])
   const { id } = parseParams(event, serviceParamsSchema)
   const body = await parseBody(event, updateServiceBodySchema)
   return updateService(shopId, id, body)

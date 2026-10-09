@@ -14,6 +14,8 @@ declare module 'vitest' {
     apiBaseUrl: string
     /** JSON-lines file the server writes every email to. */
     emailFile: string
+    /** JSON-lines file the server writes every text message (sign-in code) to. */
+    smsFile: string
   }
 }
 
@@ -47,7 +49,8 @@ export default async function setup(project: TestProject) {
 
   try {
     // Separate build dir: doesn't disturb a running `pnpm dev`.
-    execSync('pnpm nuxt build', { stdio: 'pipe', env: { ...process.env, NUXT_BUILD_DIR: '.nuxt-test' } })
+    // TRIMLY_TEST_BUILD allows the development SMS sender in this build (and only this one); it goes to .output-test.
+    execSync('pnpm nuxt build', { stdio: 'pipe', env: { ...process.env, NUXT_BUILD_DIR: '.nuxt-test', TRIMLY_TEST_BUILD: 'true' } })
   }
   catch (error) {
     const output = error as { stdout?: Buffer, stderr?: Buffer }
@@ -59,7 +62,10 @@ export default async function setup(project: TestProject) {
   // Emails (verification, password reset) go to a file the tests read.
   const emailFile = join(tmpdir(), `trimly-api-emails-${port}.jsonl`)
   writeFileSync(emailFile, '')
-  const server = spawn(process.execPath, ['.output/server/index.mjs'], {
+  // Sign-in codes likewise (the development SMS sender, allowed only in this test build).
+  const smsFile = join(tmpdir(), `trimly-api-sms-${port}.jsonl`)
+  writeFileSync(smsFile, '')
+  const server = spawn(process.execPath, ['.output-test/server/index.mjs'], {
     env: {
       ...process.env,
       NODE_ENV: 'production',
@@ -74,7 +80,10 @@ export default async function setup(project: TestProject) {
       EMAIL_PROVIDER: 'file',
       // Tests act as different clients via X-Forwarded-For (as behind a real proxy).
       TRUST_PROXY: 'true',
-      EMAIL_FILE_PATH: emailFile
+      EMAIL_FILE_PATH: emailFile,
+      SMS_PROVIDER: 'file',
+      SMS_FILE_PATH: smsFile,
+      SMS_ALLOWED_COUNTRY_CODES: '+91'
     },
     stdio: ['ignore', 'inherit', 'inherit']
   })
@@ -82,6 +91,7 @@ export default async function setup(project: TestProject) {
   await waitUntilReady(baseUrl)
   project.provide('apiBaseUrl', baseUrl)
   project.provide('emailFile', emailFile)
+  project.provide('smsFile', smsFile)
 
   return () => {
     server.kill()

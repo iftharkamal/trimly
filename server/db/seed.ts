@@ -6,7 +6,7 @@ import { existsSync } from 'node:fs'
 import { eq } from 'drizzle-orm'
 import { useAuth } from '../utils/auth'
 import { useDb } from './index'
-import { barbers, services, shopHours, shops, user } from './schema'
+import { barbers, services, shopHours, shopMembers, shops, user } from './schema'
 import { seedRefusal } from './seed-guard'
 
 // Runs outside Nuxt, so load .env ourselves (Node built-in, no dotenv).
@@ -91,13 +91,14 @@ async function seed() {
   const shopId = await db.transaction(async (tx) => {
     const [shop] = await tx
       .insert(shops)
-      .values({ ...SHOP, ownerUserId })
+      .values(SHOP)
       .returning({ id: shops.id })
 
     if (!shop) {
       throw new Error('Failed to insert shop')
     }
 
+    await tx.insert(shopMembers).values({ shopId: shop.id, userId: ownerUserId, role: 'OWNER' })
     await tx.insert(barbers).values(BARBERS.map(name => ({ shopId: shop.id, name })))
     await tx.insert(services).values(SERVICES.map(service => ({ ...service, shopId: shop.id })))
     return shop.id

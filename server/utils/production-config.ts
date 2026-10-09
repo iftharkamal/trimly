@@ -1,6 +1,8 @@
 // Startup checks for a production server: settings that would leave it broken
 // or unsafe. Errors stop the server; warnings are logged.
 
+import { DEV_SMS_PROVIDERS } from '../services/sms/dev-sms'
+
 type Env = Record<string, string | undefined>
 
 /** Providers that don't deliver email to real inboxes. */
@@ -41,6 +43,29 @@ export function checkProductionConfig(env: Env): { errors: string[], warnings: s
   const emailProvider = env.EMAIL_PROVIDER ?? 'console'
   if (NON_DELIVERING_EMAIL_PROVIDERS.has(emailProvider)) {
     warnings.push(`EMAIL_PROVIDER is "${emailProvider}": verification and password-reset emails are not delivered, so new users cannot verify.`)
+  }
+  else if (emailProvider === 'resend') {
+    if (!env.RESEND_API_KEY || !env.EMAIL_FROM) {
+      errors.push('EMAIL_PROVIDER=resend needs RESEND_API_KEY and EMAIL_FROM.')
+    }
+    else if (/@resend\.dev>?$/i.test(env.EMAIL_FROM.trim())) {
+      warnings.push(`EMAIL_FROM is Resend's test address (${env.EMAIL_FROM}): it only delivers to your own Resend account's email. Verify your domain and send from it.`)
+    }
+  }
+  else {
+    errors.push(`EMAIL_PROVIDER "${emailProvider}" is unknown. Use resend (or console/file outside production).`)
+  }
+
+  // Sign-in codes. No real SMS provider is wired up yet, so production has none.
+  const smsProvider = env.SMS_PROVIDER ?? ''
+  if (DEV_SMS_PROVIDERS.has(smsProvider)) {
+    errors.push(`SMS_PROVIDER=${smsProvider} is the development code sender (it prints sign-in codes) and must never run in production.`)
+  }
+  else if (!smsProvider) {
+    warnings.push('SMS_PROVIDER is not set: signing in with a phone number is unavailable (email sign-in works).')
+  }
+  else {
+    errors.push(`SMS_PROVIDER "${smsProvider}" is unknown.`)
   }
 
   return { errors, warnings }

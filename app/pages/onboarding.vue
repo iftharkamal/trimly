@@ -232,7 +232,7 @@ async function onSubmit(event: { data: CreateShopBody }) {
     </UForm>
 
     <template #footer>
-      <span class="break-all">Signed in as {{ me?.user.email }}</span>
+      <span class="break-all">Signed in as {{ me?.user.email ?? formatIndianMobile(me?.user.phoneNumber ?? '') }}</span>
       ·
       <button
         type="button"

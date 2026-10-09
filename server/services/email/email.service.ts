@@ -1,8 +1,9 @@
-// Sending email, behind one small interface. Today: "console" (prints the
-// email, with its link, to the server log) and "file" (appends JSON lines,
-// used by the API tests). A real provider (Resend, SMTP, …) is a new sender
-// here plus an EMAIL_PROVIDER value; nothing else changes.
+// Sending email, behind one small interface. EMAIL_PROVIDER picks the sender:
+// "resend" (real delivery), "console" (prints the email, with its link, to the
+// server log) or "file" (appends JSON lines, used by the API tests). Another
+// provider is a new sender plus an EMAIL_PROVIDER value; nothing else changes.
 import { appendFile } from 'node:fs/promises'
+import { createResendSender } from './resend'
 
 export interface EmailMessage {
   to: string
@@ -42,6 +43,14 @@ function configuredSender(): EmailSender {
         throw new Error('EMAIL_PROVIDER=file needs EMAIL_FILE_PATH')
       }
       return fileSender(path)
+    }
+    case 'resend': {
+      const apiKey = process.env.RESEND_API_KEY
+      const from = process.env.EMAIL_FROM
+      if (!apiKey || !from) {
+        throw new Error('EMAIL_PROVIDER=resend needs RESEND_API_KEY and EMAIL_FROM')
+      }
+      return createResendSender({ apiKey, from })
     }
     default:
       throw new Error(`Unknown EMAIL_PROVIDER "${provider}"`)

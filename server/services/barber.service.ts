@@ -29,3 +29,9 @@ export async function createBarber(
   }
   return barber
 }
+
+/** The chair this member works, or null (e.g. an owner who doesn't cut hair). */
+export async function findChairOfMember(memberId: string): Promise<string | null> {
+  const chair = await useDb().query.barbers.findFirst({ where: eq(barbers.memberId, memberId), columns: { id: true } })
+  return chair?.id ?? null
+}

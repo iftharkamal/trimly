@@ -18,9 +18,11 @@ export interface ShopProfile {
   timezone: string
   currency: string
   isOpen: boolean
+  /** Gap between customers (cleanup, payment), added to waiting-time estimates. */
+  serviceBufferMinutes: number
 }
 
-const PROFILE_COLUMNS = { id: true, name: true, slug: true, phone: true, address: true, timezone: true, currency: true, isOpen: true } as const
+const PROFILE_COLUMNS = { id: true, name: true, slug: true, phone: true, address: true, timezone: true, currency: true, isOpen: true, serviceBufferMinutes: true } as const
 
 export async function getShopProfile(shopId: string): Promise<ShopProfile> {
   const shop = await useDb().query.shops.findFirst({ where: eq(shops.id, shopId), columns: PROFILE_COLUMNS })
@@ -39,9 +41,9 @@ export async function getShopProfileBySlug(slug: string): Promise<ShopProfile> {
   return shop
 }
 
-/** Opens or closes the shop to online joins. */
-export async function setShopOpen(shopId: string, isOpen: boolean): Promise<ShopProfile> {
-  const [shop] = await useDb().update(shops).set({ isOpen }).where(eq(shops.id, shopId)).returning({
+/** Changes the shop's settings: online joining on/off and the gap between customers. */
+export async function updateShopSettings(shopId: string, settings: { isOpen?: boolean, serviceBufferMinutes?: number }): Promise<ShopProfile> {
+  const [shop] = await useDb().update(shops).set(settings).where(eq(shops.id, shopId)).returning({
     id: shops.id,
     name: shops.name,
     slug: shops.slug,
@@ -49,7 +51,8 @@ export async function setShopOpen(shopId: string, isOpen: boolean): Promise<Shop
     address: shops.address,
     timezone: shops.timezone,
     currency: shops.currency,
-    isOpen: shops.isOpen
+    isOpen: shops.isOpen,
+    serviceBufferMinutes: shops.serviceBufferMinutes
   })
   if (!shop) {
     throw new DomainError('SHOP_NOT_FOUND', 404, 'Shop not found')

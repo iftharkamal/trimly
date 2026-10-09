@@ -114,6 +114,26 @@ async function onSave() {
         />
       </NuxtLink>
 
+      <NuxtLink
+        to="/dashboard/settings/qr-poster"
+        class="group flex items-center gap-4 rounded-lg bg-default p-4 ring-1 ring-default transition-colors hover:bg-elevated sm:p-5"
+      >
+        <span class="grid size-10 shrink-0 place-items-center rounded-full bg-elevated text-highlighted group-hover:bg-accented">
+          <UIcon
+            name="i-lucide-qr-code"
+            class="size-5"
+          />
+        </span>
+        <span class="min-w-0 flex-1">
+          <span class="block font-semibold text-highlighted">QR poster</span>
+          <span class="block text-sm text-muted">Print it for the counter, or share the QR code online.</span>
+        </span>
+        <UIcon
+          name="i-lucide-chevron-right"
+          class="size-5 text-dimmed"
+        />
+      </NuxtLink>
+
       <UCard>
         <template #header>
           <h2 class="font-semibold text-highlighted">

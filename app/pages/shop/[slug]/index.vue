@@ -66,20 +66,31 @@ const activePlace = ref<{ code: string, tracking: QueueTrackingDto } | null>(nul
 
 onMounted(async () => {
   const code = recallQueuePlace(slug.value)
-  if (!code) {
-    return
-  }
-  try {
-    const { data } = await $fetch<{ data: QueueTrackingDto }>(`/api/track/${code}`)
-    if (data.state === 'COMPLETED' || data.state === 'CANCELLED') {
+  if (code) {
+    try {
+      const { data } = await $fetch<{ data: QueueTrackingDto }>(`/api/track/${code}`)
+      if (data.state === 'COMPLETED' || data.state === 'CANCELLED') {
+        forgetQueuePlace(slug.value)
+      }
+      else {
+        activePlace.value = { code, tracking: data }
+      }
+    }
+    catch {
       forgetQueuePlace(slug.value)
     }
-    else {
-      activePlace.value = { code, tracking: data }
-    }
   }
-  catch {
-    forgetQueuePlace(slug.value)
+
+  // Arrived by scanning the shop's QR code (?join=1): straight to the join
+  // form, unless this phone already has a place here (shown instead) or the
+  // queue isn't taking customers. The flag is then dropped, so a refresh or
+  // going back doesn't reopen the form.
+  if (route.query.join === '1') {
+    if (!activePlace.value) {
+      openJoin()
+    }
+    const { join: _join, ...rest } = route.query
+    await navigateTo({ query: rest }, { replace: true })
   }
 })
 

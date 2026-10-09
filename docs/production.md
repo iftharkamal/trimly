@@ -25,11 +25,14 @@ and **logs a warning** for the other problems below.
      `TRUST_PROXY=true`. The last entry is used; entries the client sent are ignored.
    - More than one proxy (e.g. Cloudflare → Nginx): not supported yet. Every client would share
      the outer proxy's address, and so one set of limits.
-6. **Email.** `EMAIL_PROVIDER=resend`, with `RESEND_API_KEY` and `EMAIL_FROM` (the server won't
+6. **Public address.** Set `NUXT_PUBLIC_SITE_URL` to the domain customers use (defaults to
+   `BETTER_AUTH_URL`). Shop QR codes and shared links point there. Printed QR posters keep working only
+   while that address and the shop's link name stay the same.
+7. **Email.** `EMAIL_PROVIDER=resend`, with `RESEND_API_KEY` and `EMAIL_FROM` (the server won't
    start without them). Otherwise new users can't verify their email and nobody can reset a
    password. See [Email with Resend](#email-with-resend).
 
-7. **Phone sign-in.** Needs a real SMS provider, which isn't built yet. Until then leave
+8. **Phone sign-in.** Needs a real SMS provider, which isn't built yet. Until then leave
    `SMS_PROVIDER` unset: phone sign-in answers 503 and people use email. The development
    sender (`console`/`file`, which prints codes) can't run in a production build: that's
    decided when the app is built, not by environment variables, and the server also refuses to

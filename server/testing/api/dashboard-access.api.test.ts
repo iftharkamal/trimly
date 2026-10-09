@@ -71,6 +71,9 @@ describe('dashboard access', () => {
     }
     // Nothing from another shop leaks in.
     expect(response.html).not.toContain('Faisal')
+    // Customers get the shop page through the QR code, not a button on the queue screen.
+    expect(response.html).toContain('QR code')
+    expect(response.html).not.toContain('Customer page<')
   })
 
   it('puts the sections in a bottom tab bar; Settings (with Staff) is in the account menu', async () => {
@@ -96,6 +99,14 @@ describe('dashboard access', () => {
     const staff = await page('/dashboard/settings/staff', owner.cookie)
     expect(staff.status).toBe(200)
     expect(staff.html).toContain('href="/dashboard/settings"')
+    // The QR poster, also under Settings: the shop's QR code, pointing at the public address.
+    expect((await page('/dashboard/settings', owner.cookie)).html).toContain('href="/dashboard/settings/qr-poster"')
+    const poster = await page('/dashboard/settings/qr-poster', owner.cookie)
+    expect(poster.status).toBe(200)
+    expect(poster.html).toContain('Scan to join the queue')
+    expect(poster.html).toMatch(/aria-label="QR code that opens [^"]+\/shop\/[a-z0-9-]+\?join=1"[^>]*>\s*<svg/)
+    expect(await page('/dashboard/settings/qr-poster', barber.cookie)).toMatchObject({ status: 302, location: '/dashboard' })
+
     // Barbers can't open it; the old address still works.
     expect(await page('/dashboard/settings/staff', barber.cookie)).toMatchObject({ status: 302, location: '/dashboard' })
     expect(await page('/dashboard/staff', owner.cookie)).toMatchObject({ status: 307, location: '/dashboard/settings/staff' })

@@ -45,7 +45,7 @@ request schemas are in [`shared/schemas/queue.ts`](../shared/schemas/queue.ts).
 | 401 | `UNAUTHENTICATED` — no valid session |
 | 403 | `FORBIDDEN` — signed in, but not a member of the shop · `INSUFFICIENT_ROLE` — a member whose role can't do this · `ACCOUNT_NOT_VERIFIED` · `FORBIDDEN_ORIGIN` — sent by another website |
 | 404 | `SHOP_NOT_FOUND`, `SERVICE_NOT_FOUND`, `BARBER_NOT_FOUND`, `ENTRY_NOT_FOUND` |
-| 409 | `SHOP_SELECTION_REQUIRED`, `ALREADY_HAS_SHOP`, `SERVICE_IN_USE`, `ALREADY_IN_QUEUE`, `BARBER_BUSY`, `INVALID_TRANSITION`, `NO_BARBER_AVAILABLE`, `SHOP_CLOSED`, `SLOT_TAKEN`, `SLOT_UNAVAILABLE`, `ALREADY_BOOKED` |
+| 409 | `SHOP_SELECTION_REQUIRED`, `ALREADY_HAS_SHOP`, `SERVICE_IN_USE`, `ALREADY_STAFF`, `MEMBER_OF_ANOTHER_SHOP`, `BARBER_HAS_CUSTOMERS`, `LAST_ACTIVE_BARBER`, `ALREADY_IN_QUEUE`, `BARBER_BUSY`, `INVALID_TRANSITION`, `NO_BARBER_AVAILABLE`, `SHOP_CLOSED`, `SLOT_TAKEN`, `SLOT_UNAVAILABLE`, `ALREADY_BOOKED` |
 | 429 | `RATE_LIMITED` — too many public joins or bookings; see `Retry-After` |
 | 500 | `INTERNAL_ERROR` |
 
@@ -347,6 +347,7 @@ timestamps). Nothing about shops is stored on the Better Auth user.
 | Open/close the shop (`PATCH /api/dashboard/shop`) | ✓ | 403 `INSUFFICIENT_ROLE` | 403 |
 | View services (`GET /api/shop/services`) | ✓ | ✓ | ✓ |
 | Add, edit, archive or delete services (`/api/shop/services*`), `PUT /api/dashboard/hours` | ✓ | 403 `INSUFFICIENT_ROLE` | 403 |
+| Staff (`/api/shop/staff*`) | ✓ | 403 `INSUFFICIENT_ROLE` | 403 |
 | Reports (`GET /api/reports`) | ✓ | 403 `INSUFFICIENT_ROLE` | 403 |
 
 **Which shop a request is about** (signed-in user → membership → shop):
@@ -429,6 +430,54 @@ orphaned.
 
 **Errors:** 400 `VALIDATION_ERROR` · 401 `UNAUTHENTICATED` · 403 `FORBIDDEN` (no shop) / `INSUFFICIENT_ROLE`
 (not the owner) · 404 `SERVICE_NOT_FOUND` (including another shop's) · 409 `SERVICE_IN_USE`.
+
+## Staff (owner)
+
+A barber is a **chair** in the queue (the `barbers` table) worked by a **shop member**
+(`barbers.member_id` → `shop_members` → user, with the role). Staff never get a separate login
+identity: they sign in with their own Trimly account. All three endpoints are OWNER only; the shop
+comes from the session, and another shop's barber answers 404.
+
+A staff member:
+
+```json
+{
+  "id": "…", "name": "Arjun", "isActive": true, "role": "BARBER",
+  "account": { "status": "LINKED", "name": "Arjun N", "email": null, "phoneNumber": "+919811111111" },
+  "invitePhone": "+919811111111", "status": "SERVING", "waiting": 2
+}
+```
+
+- `account.status`: `LINKED` (they can sign in and use the dashboard) or `INVITED` (waiting for
+  them to verify `invitePhone`). `role` is null until linked.
+- `status`: `SERVING` (with a customer), `AVAILABLE` or `INACTIVE`. `waiting`: customers waiting for them.
+
+### `GET /api/shop/staff`
+
+Every chair in the shop, active first. A new shop has one: the owner's own (linked, role `OWNER`).
+
+### `POST /api/shop/staff`
+
+- **Body** (strict): `{ "name" (1–60), "phone" }`, their own 10-digit Indian mobile.
+- The chair takes customers at once. If a verified account has that number, it's linked now as a
+  `BARBER` member. Otherwise it's linked the first time someone verifies that number by OTP
+  (sign-up, sign-in, or adding a phone in Settings).
+- **201:** the staff member.
+
+**Errors:** 400 `VALIDATION_ERROR` · 409 `ALREADY_STAFF` (number already added) · 409
+`MEMBER_OF_ANOTHER_SHOP` (they work at another shop; one shop per person for now).
+
+### `PATCH /api/shop/staff/:id`
+
+- **Body** (strict): any of `{ "name", "isActive" }`.
+- `isActive: false` deactivates: no new customers, and a `BARBER` loses dashboard access (their
+  membership is removed; the owner keeps theirs). Refused with 409 `BARBER_HAS_CUSTOMERS` while
+  customers are waiting, being served or booked with them, and 409 `LAST_ACTIVE_BARBER` for the last
+  active chair.
+- `isActive: true` reactivates, linking their account again if their number is verified.
+- **200:** the staff member.
+
+**Errors:** 400 · 401 · 403 · 404 `BARBER_NOT_FOUND` · 409 (above).
 
 ## Shops and services
 

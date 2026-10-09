@@ -33,5 +33,9 @@ export interface ServiceDto {
 
 /** A service as the owner manages it (archived ones included). */
 export interface ManagedServiceDto extends ServiceDto {
+  shopId: string
+  /** Archived services (false) are hidden from customers; past visits keep them. */
   isActive: boolean
+  createdAt: string
+  updatedAt: string
 }

@@ -33,6 +33,14 @@ export default defineNuxtConfig({
 
   css: ['~/assets/css/main.css'],
 
+  // The sign-in pages moved under /auth. Old links (bookmarks, verification
+  // emails already sent) still work.
+  routeRules: {
+    '/login': { redirect: '/auth/login' },
+    '/signup': { redirect: '/auth/signup' },
+    '/verify-email': { redirect: '/auth/verify' }
+  },
+
   // Light until the user picks otherwise (remembered per device).
   colorMode: {
     preference: 'light',

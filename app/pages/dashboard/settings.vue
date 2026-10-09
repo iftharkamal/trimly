@@ -176,9 +176,8 @@ async function onSave() {
       description="We'll text a code to check it's yours."
     >
       <template #body>
-        <PhoneOtpForm
+        <AddPhoneForm
           v-if="phoneModalOpen"
-          mode="add"
           @done="onPhoneVerified"
         />
       </template>

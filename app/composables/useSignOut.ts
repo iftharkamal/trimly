@@ -6,7 +6,7 @@ export function useSignOut() {
     signingOut.value = true
     await authClient.signOut()
     clearNuxtData()
-    await navigateTo('/login')
+    await navigateTo('/auth/login')
   }
 
   return { signingOut, signOut }

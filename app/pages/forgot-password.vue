@@ -4,7 +4,9 @@ import { z } from 'zod'
 definePageMeta({ middleware: 'guest' })
 useHead({ title: 'Forgot password · Trimly' })
 
-const email = ref('')
+const route = useRoute()
+// Prefilled when coming from the sign-in page.
+const email = ref(typeof route.query.email === 'string' ? route.query.email : '')
 const emailError = ref<string | null>(null)
 const sending = ref(false)
 const sent = ref(false)
@@ -78,7 +80,7 @@ async function onSubmit() {
 
     <template #footer>
       <NuxtLink
-        to="/login"
+        to="/auth/login"
         class="font-medium text-highlighted underline-offset-2 hover:underline"
       >
         Back to sign in

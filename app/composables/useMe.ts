@@ -16,7 +16,7 @@ export function useMe() {
  */
 export function redirectForMeError(error: NuxtError, to: RouteLocationNormalized) {
   if (error.statusCode === 401) {
-    return navigateTo({ path: '/login', query: { redirect: to.fullPath } })
+    return navigateTo({ path: '/auth/login', query: { redirect: to.fullPath } })
   }
   const status = error.statusCode ?? 500
   return abortNavigation(createError({

@@ -29,7 +29,7 @@ async function onSubmit() {
       : error.message ?? 'Could not change your password. Please try again.'
     return
   }
-  await navigateTo({ path: '/login', query: { reset: '1' } })
+  await navigateTo({ path: '/auth/login', query: { reset: '1' } })
 }
 </script>
 

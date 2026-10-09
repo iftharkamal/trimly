@@ -73,6 +73,23 @@ describe('dashboard access', () => {
     expect(response.html).not.toContain('Faisal')
   })
 
+  it('puts the sections in a bottom tab bar (Settings in the account menu for owners)', async () => {
+    const bottomTabs = (html: string) => {
+      const bar = /<nav class="fixed inset-x-0 bottom-0[^"]*"[^>]*>([\s\S]*?)<\/nav>/.exec(html)?.[1] ?? ''
+      return [...bar.matchAll(/href="([^"]+)"/g)].map(match => match[1])
+    }
+
+    const ownerPage = (await page('/dashboard', owner.cookie)).html
+    expect(bottomTabs(ownerPage)).toEqual(['/dashboard', '/dashboard/appointments', '/dashboard/services', '/dashboard/staff', '/dashboard/reports'])
+    // The current page is marked for screen readers.
+    expect(ownerPage).toMatch(/<a[^>]*href="\/dashboard"[^>]*aria-current="page"|<a[^>]*aria-current="page"[^>]*href="\/dashboard"/)
+
+    const shop = await createShopFixture({ slug: `tabs-${randomUUID().slice(0, 6)}` })
+    const barber = await signUp(`access-tabs-${randomUUID().slice(0, 8)}@trimly.test`)
+    await addMemberFixture(shop.shopId, barber.userId, 'BARBER')
+    expect(bottomTabs((await page('/dashboard', barber.cookie)).html)).toEqual(['/dashboard', '/dashboard/appointments', '/dashboard/settings'])
+  })
+
   it('keeps the session across page refreshes', async () => {
     for (let refresh = 0; refresh < 3; refresh++) {
       expect((await page('/dashboard', owner.cookie)).status).toBe(200)

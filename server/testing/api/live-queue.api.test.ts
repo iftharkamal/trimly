@@ -59,11 +59,10 @@ describe('the queue moving', () => {
   it('advances and recalculates as the barber starts and completes', async () => {
     const shop = await newShop('moving')
     await request('PATCH', '/api/dashboard/shop', { cookie: shop.cookie, body: { serviceBufferMinutes: 0 } })
-    const [a, b, c] = await Promise.all(['A', 'B', 'C'].map(async (name, index) => {
-      // In order, so positions are predictable.
-      await new Promise(resolve => setTimeout(resolve, index * 30))
-      return (await join(shop.shopId, shop.haircutId, name)).json.data
-    }))
+    // One after another, so the queue order is certain.
+    const a = (await join(shop.shopId, shop.haircutId, 'A')).json.data
+    const b = (await join(shop.shopId, shop.haircutId, 'B')).json.data
+    const c = (await join(shop.shopId, shop.haircutId, 'C')).json.data
     const track = async (code: string) => (await request('GET', `/api/track/${code}`)).json.data
 
     expect(await track(c.trackingCode)).toMatchObject({ position: 3, customersAhead: 2, waitMinutes: 40 })

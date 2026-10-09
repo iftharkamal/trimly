@@ -187,7 +187,8 @@ describe('shop onboarding', () => {
       address: 'MG Road, Kochi',
       timezone: 'Asia/Dubai',
       currency: 'AED',
-      isOpen: true
+      isOpen: true,
+      serviceBufferMinutes: 5
     })
     const me = (await request('GET', '/api/me', { cookie })).json.data
     expect(me).toMatchObject({ role: 'OWNER', shop: { id: created.json.data.id }, memberships: [{ role: 'OWNER' }] })

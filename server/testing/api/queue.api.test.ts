@@ -327,8 +327,9 @@ describe('GET /api/dashboard', () => {
 
     expect(response.status).toBe(200)
     expect(response.json.data).toEqual({
-      shop: { id: shop.shopId, name: 'Test Barber', slug: 'test-barber', phone: null, address: null, timezone: 'Asia/Kolkata', currency: 'INR', isOpen: true },
-      member: { name: 'Test User', role: 'OWNER' },
+      shop: { id: shop.shopId, name: 'Test Barber', slug: 'test-barber', phone: null, address: null, timezone: 'Asia/Kolkata', currency: 'INR', isOpen: true, serviceBufferMinutes: 5 },
+      // Test shops' chairs aren't linked to a member.
+      member: { name: 'Test User', role: 'OWNER', barberId: null },
       owner: { name: 'Test User' },
       barbers: [{ id: shop.barberId, name: 'Faisal' }],
       today: { customers: 2, servicesCompleted: 1, revenueMinor: 12000 }
@@ -372,7 +373,8 @@ describe('GET /api/shops/by-slug/:slug', () => {
       address: null,
       timezone: 'Asia/Kolkata',
       currency: 'INR',
-      isOpen: true
+      isOpen: true,
+      serviceBufferMinutes: 5
     })
   })
 

@@ -503,14 +503,14 @@ The shop behind a `/shop/:slug` link.
 
 ### `GET /api/dashboard`
 
-- **Auth:** member (owner, barber or receptionist). The shop comes from the session (`getCurrentShopContext`: user → membership → shop). `member` is who is signed in; `owner` is the shop's OWNER.
+- **Auth:** member (owner, barber or receptionist). The shop comes from the session (`getCurrentShopContext`: user → membership → shop). `member` is who is signed in, with `barberId`: the chair they work (their lane in the queue), or null. `owner` is the shop's OWNER.
 - **200:**
 
 ```json
 {
   "data": {
-    "shop": { "id": "5b0c…", "name": "Faisal Barber", "slug": "faisal-barber", "phone": "+919876543210", "address": "MG Road, Kochi", "timezone": "Asia/Kolkata", "currency": "INR", "isOpen": true },
-    "member": { "name": "Faisal", "role": "OWNER" },
+    "shop": { "id": "5b0c…", "name": "Faisal Barber", "slug": "faisal-barber", "phone": "+919876543210", "address": "MG Road, Kochi", "timezone": "Asia/Kolkata", "currency": "INR", "isOpen": true, "serviceBufferMinutes": 5 },
+    "member": { "name": "Faisal", "role": "OWNER", "barberId": "a1f2…" },
     "owner": { "name": "Faisal" },
     "barbers": [{ "id": "a1f2…", "name": "Faisal" }],
     "today": { "customers": 4, "servicesCompleted": 1, "revenueMinor": 15000 }
@@ -526,13 +526,19 @@ joined today and weren't cancelled or marked no-show. `revenueMinor` is the tota
 
 ### `PATCH /api/dashboard/shop`
 
-Open or close the shop to online joins. Walk-ins can always be added.
+The shop's queue settings.
 
-- **Auth:** owner only.
-- **Body** (strict): `{ "isOpen": boolean }`.
-- **200:** the updated shop profile (same shape as `GET /api/shops/by-slug/:slug`).
+- **Auth:** owner only; the shop comes from the session.
+- **Body** (strict, at least one):
+  - `isOpen`: boolean. Open or close the shop to online joins; walk-ins can always be added.
+  - `serviceBufferMinutes`: whole minutes, 0–60 (default 5). The gap between one customer finishing
+    and the next starting (cleaning up, taking payment). It's added after every service in every
+    waiting-time estimate, so changing it updates all ETAs on the next refresh, for staff and on
+    customers' tracking links.
+- **200:** the updated shop profile (same shape as `GET /api/shops/by-slug/:slug`, including
+  `serviceBufferMinutes`).
 
-**Errors:** 400 `VALIDATION_ERROR` · 401 `UNAUTHENTICATED` · 403 `FORBIDDEN`.
+**Errors:** 400 `VALIDATION_ERROR` · 401 `UNAUTHENTICATED` · 403 `FORBIDDEN` / `INSUFFICIENT_ROLE`.
 
 ### `GET /api/reports`
 

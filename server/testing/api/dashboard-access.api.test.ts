@@ -71,6 +71,9 @@ describe('dashboard access', () => {
     }
     // Nothing from another shop leaks in.
     expect(response.html).not.toContain('Faisal')
+    // Customers get the shop page through the QR code, not a button on the queue screen.
+    expect(response.html).toContain('QR code')
+    expect(response.html).not.toContain('Customer page<')
   })
 
   it('puts the sections in a bottom tab bar; Settings (with Staff) is in the account menu', async () => {

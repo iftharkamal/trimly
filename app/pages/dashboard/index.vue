@@ -74,6 +74,9 @@ const barbers = computed(() => lanes.value.map(lane => lane.barber).filter(barbe
 
 const isQueueLoading = computed(() => !queue.value && (queueStatus.value === 'pending' || queueStatus.value === 'idle'))
 
+// The shop's QR code, shown to customers at the chair.
+const qrOpen = ref(false)
+
 // Add customer
 const addOpen = ref(false)
 
@@ -199,13 +202,12 @@ async function onConfirm() {
           />
           <UButton
             v-if="dashboard"
-            :to="`/shop/${dashboard.shop.slug}`"
-            target="_blank"
-            label="Customer page"
-            icon="i-lucide-external-link"
+            label="QR code"
+            icon="i-lucide-qr-code"
             color="neutral"
             variant="ghost"
             size="lg"
+            @click="qrOpen = true"
           />
           <UButton
             label="Add Customer"
@@ -356,6 +358,13 @@ async function onConfirm() {
         :member-role="dashboard.member.role"
       />
     </template>
+
+    <ShopQrModal
+      v-if="dashboard"
+      v-model:open="qrOpen"
+      :shop-name="dashboard.shop.name"
+      :slug="dashboard.shop.slug"
+    />
 
     <AddCustomerModal
       v-if="dashboard"

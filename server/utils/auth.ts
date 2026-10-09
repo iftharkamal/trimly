@@ -21,6 +21,19 @@ export const CLIENT_IP_HEADER = 'x-trimly-client-ip'
 const DAY_SECONDS = 24 * 60 * 60
 const OTP_MINUTES = 5
 
+/**
+ * Every verification link returns to /auth/verify ("Email verified"). Links
+ * sent by a sign-in attempt before verifying would otherwise return to "/".
+ */
+function verificationLandsOnVerifyPage(url: string): string {
+  const link = new URL(url)
+  const callback = link.searchParams.get('callbackURL')
+  if (!callback || callback === '/') {
+    link.searchParams.set('callbackURL', '/auth/verify')
+  }
+  return link.toString()
+}
+
 // Never email the internal address of an account created by phone.
 function sendAccountEmail(to: string, message: { subject: string, text: string }) {
   if (!isPlaceholderEmail(to)) {
@@ -75,7 +88,7 @@ function createAuth() {
       sendOnSignIn: true,
       autoSignInAfterVerification: true,
       sendVerificationEmail: async ({ user, url }) => {
-        sendAccountEmail(user.email, verificationEmail({ name: user.name, url }))
+        sendAccountEmail(user.email, verificationEmail({ name: user.name, url: verificationLandsOnVerifyPage(url) }))
       }
     },
     plugins: [

@@ -173,24 +173,42 @@ async function onConfirm() {
 
     <template v-else>
       <!-- Header -->
-      <header class="flex flex-wrap items-end justify-between gap-4">
-        <div v-if="dashboard">
-          <p class="text-sm text-muted">
-            {{ todayLabel }} · {{ dashboard.shop.name }}
-          </p>
-          <h1 class="mt-1 text-2xl font-semibold tracking-tight text-highlighted sm:text-3xl">
-            {{ greeting }}
-          </h1>
-        </div>
-        <div
-          v-else
-          class="space-y-2"
-        >
-          <USkeleton class="h-4 w-48" />
-          <USkeleton class="h-8 w-64" />
+      <header class="space-y-4">
+        <!-- Who and where, with the shop's QR code at the end, ready to show a customer. -->
+        <div class="flex items-center justify-between gap-4">
+          <div
+            v-if="dashboard"
+            class="min-w-0"
+          >
+            <p class="text-sm text-muted">
+              {{ todayLabel }} · {{ dashboard.shop.name }}
+            </p>
+            <h1 class="mt-1 text-2xl font-semibold tracking-tight text-highlighted sm:text-3xl">
+              {{ greeting }}
+            </h1>
+          </div>
+          <div
+            v-else
+            class="space-y-2"
+          >
+            <USkeleton class="h-4 w-48" />
+            <USkeleton class="h-8 w-64" />
+          </div>
+
+          <UButton
+            v-if="dashboard"
+            icon="i-lucide-qr-code"
+            aria-label="Show the shop's QR code"
+            title="Shop QR code"
+            color="neutral"
+            variant="ghost"
+            class="shrink-0 rounded-xl p-3"
+            :ui="{ leadingIcon: 'size-7' }"
+            @click="qrOpen = true"
+          />
         </div>
 
-        <div class="flex flex-wrap items-center gap-3">
+        <div class="flex flex-wrap items-center justify-between gap-3">
           <USwitch
             v-if="dashboard"
             :model-value="dashboard.shop.isOpen"
@@ -199,15 +217,6 @@ async function onConfirm() {
             :label="dashboard.shop.isOpen ? 'Open' : 'Closed'"
             :description="dashboard.member.role === 'OWNER' ? 'Online joining' : 'Online joining (the owner switches this)'"
             @update:model-value="value => setOpen(value)"
-          />
-          <UButton
-            v-if="dashboard"
-            label="QR code"
-            icon="i-lucide-qr-code"
-            color="neutral"
-            variant="ghost"
-            size="lg"
-            @click="qrOpen = true"
           />
           <UButton
             label="Add Customer"

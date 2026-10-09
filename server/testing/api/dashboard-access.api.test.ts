@@ -72,7 +72,8 @@ describe('dashboard access', () => {
     // Nothing from another shop leaks in.
     expect(response.html).not.toContain('Faisal')
     // Customers get the shop page through the QR code, not a button on the queue screen.
-    expect(response.html).toContain('QR code')
+    // An icon-only QR button at the end of the greeting row.
+    expect(response.html).toContain('aria-label="Show the shop&#39;s QR code"')
     expect(response.html).not.toContain('Customer page<')
   })
 

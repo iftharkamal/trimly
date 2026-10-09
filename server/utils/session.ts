@@ -1,14 +1,18 @@
-// Who is making the request, from the Better Auth session cookie only.
-// Routes never accept a user, shop or role from the client.
+// Who is making the request, from the Better Auth session cookie only, and
+// what they may do: authenticated user → shop membership → shop. Routes never
+// accept a user, shop or role from the client; a shop id in the URL is only
+// used after checking the user belongs to that shop.
 //
 //   getCurrentUser(event)               the signed-in user, or null
 //   requireUser(event)                  … or 401 / 403
-//   requireShopMember(event, shopId?)   … and their shop membership, or 403
+//   requireShopMember(event, shopId?)   … and their membership, or 403 (409 if ambiguous)
 //   requireRole(event, roles, shopId?)  … with one of these roles, or 403
+//   requireShop(event, shopId?)         … plus the shop itself
 //   getShopMember(event, shopId)        membership in this shop, or null (public routes)
 import type { H3Event } from 'h3'
 import type { MemberRole } from '../../shared/constants'
-import { findMembership, findMembershipInShop } from '../services/membership.service'
+import { findMembershipInShop, listMemberships, type Membership } from '../services/membership.service'
+import { getShopProfile, type ShopProfile } from '../services/shop.service'
 import { ApiError } from './api'
 import { useAuth } from './auth'
 import { isPlaceholderEmail } from './phone-identity'
@@ -25,6 +29,7 @@ export interface CurrentUser {
 
 export interface ShopMember {
   user: CurrentUser
+  membershipId: string
   shopId: string
   role: MemberRole
 }
@@ -77,17 +82,31 @@ export async function requireUser(event: H3Event): Promise<CurrentUser> {
 }
 
 /**
- * The signed-in user and their shop membership. Without `shopId`, their own
- * shop (MVP: one per person); with it (a shop id from the URL), they must
- * belong to that shop. 403 FORBIDDEN otherwise.
+ * Which of the user's memberships a request without a shop id is about: the
+ * only one. Several would need the person to choose, which the app can't ask
+ * yet, so it refuses rather than guess (409 SHOP_SELECTION_REQUIRED).
+ */
+export function resolveCurrentMembership(memberships: Membership[]): Membership | null {
+  if (memberships.length > 1) {
+    throw new ApiError('SHOP_SELECTION_REQUIRED', 409, 'This account belongs to more than one shop. Choosing between shops isn\'t available yet.')
+  }
+  return memberships[0] ?? null
+}
+
+/**
+ * The signed-in user and their membership. With `shopId` (from the URL) they
+ * must belong to that shop; without it, the shop is resolved from their
+ * memberships. 403 FORBIDDEN if they don't belong.
  */
 export async function requireShopMember(event: H3Event, shopId?: string): Promise<ShopMember> {
   const user = await requireUser(event)
-  const membership = shopId ? await findMembershipInShop(user.id, shopId) : await findMembership(user.id)
+  const membership = shopId
+    ? await findMembershipInShop(user.id, shopId)
+    : resolveCurrentMembership(await listMemberships(user.id))
   if (!membership) {
     throw new ApiError('FORBIDDEN', 403, shopId ? 'This account does not belong to this shop' : 'This account does not belong to a shop')
   }
-  return { user, ...membership }
+  return { user, membershipId: membership.id, shopId: membership.shopId, role: membership.role }
 }
 
 /** Like requireShopMember, and the member must have one of `roles`. 403 INSUFFICIENT_ROLE otherwise. */
@@ -99,6 +118,12 @@ export async function requireRole(event: H3Event, roles: readonly MemberRole[], 
   return member
 }
 
+/** Like requireShopMember, with the shop's profile. */
+export async function requireShop(event: H3Event, shopId?: string): Promise<ShopMember & { shop: ShopProfile }> {
+  const member = await requireShopMember(event, shopId)
+  return { ...member, shop: await getShopProfile(member.shopId) }
+}
+
 /** The requester's membership in this shop, or null (signed out, unverified, or not a member). Never throws. */
 export async function getShopMember(event: H3Event, shopId: string): Promise<ShopMember | null> {
   const user = await getCurrentUser(event)
@@ -106,5 +131,5 @@ export async function getShopMember(event: H3Event, shopId: string): Promise<Sho
     return null
   }
   const membership = await findMembershipInShop(user.id, shopId)
-  return membership ? { user, ...membership } : null
+  return membership ? { user, membershipId: membership.id, shopId: membership.shopId, role: membership.role } : null
 }

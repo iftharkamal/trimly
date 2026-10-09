@@ -31,6 +31,13 @@ export default defineNuxtRouteMiddleware(async (to) => {
     return navigateTo({ path: '/auth/login', query: { redirect: to.fullPath } })
   }
 
+  if (to.meta.shop === 'required' && !me.value.shop && me.value.memberships.length > 1) {
+    return abortNavigation(createError({
+      statusCode: 409,
+      statusMessage: 'This account belongs to more than one shop. Choosing between shops isn\'t available yet.',
+      fatal: true
+    }))
+  }
   if (to.meta.shop === 'required' && !me.value.shop) {
     return navigateTo('/onboarding')
   }

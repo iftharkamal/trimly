@@ -67,7 +67,8 @@ describe('email accounts', () => {
     expect(response.json.data).toEqual({
       user: { id: userId, name: 'Arjun', email, phoneNumber: null },
       shop: null,
-      role: null
+      role: null,
+      memberships: []
     })
   })
 

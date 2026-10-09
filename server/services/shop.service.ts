@@ -5,7 +5,7 @@ import { isUniqueViolation } from '../db/errors'
 import { shopHours, shops } from '../db/schema'
 import { createBarber } from './barber.service'
 import { DomainError } from './errors'
-import { addMember } from './membership.service'
+import { addMember, lockAndCheckHasMembership } from './membership.service'
 
 export interface ShopProfile {
   id: string
@@ -118,13 +118,17 @@ export async function isSlugAvailable(slug: string): Promise<boolean> {
 
 /**
  * Creates a shop with the user as its OWNER member, its first barber and
- * default opening hours, in one transaction. The database enforces one shop
- * per person (shop_members) and unique link names, so two requests at once
- * can't create two shops.
+ * default opening hours, in one transaction. For now someone who already
+ * belongs to a shop can't create another (there's no way to switch between
+ * shops yet); that check is locked per user, so two requests at once can't
+ * both pass. Link names are unique in the database.
  */
 export async function createShopWithOwner(input: NewShopInput): Promise<ShopProfile> {
   try {
     const shopId = await useDb().transaction(async (tx) => {
+      if (await lockAndCheckHasMembership(tx, input.ownerUserId)) {
+        throw new DomainError('ALREADY_HAS_SHOP', 409, 'This account already belongs to a shop')
+      }
       const [shop] = await tx
         .insert(shops)
         .values({
@@ -145,9 +149,6 @@ export async function createShopWithOwner(input: NewShopInput): Promise<ShopProf
     return await getShopProfile(shopId)
   }
   catch (error) {
-    if (isUniqueViolation(error, 'shop_members_user_id_unique')) {
-      throw new DomainError('ALREADY_HAS_SHOP', 409, 'This account already has a shop')
-    }
     if (isUniqueViolation(error, 'shops_slug_unique')) {
       throw new DomainError('SLUG_TAKEN', 409, 'That link name is taken. Try another.')
     }

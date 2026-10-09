@@ -1,7 +1,7 @@
 import type { MemberRole } from '../constants'
 import type { ShopProfileDto } from './shop'
 
-/** The signed-in user, their shop and their role in it (null until onboarding is done). */
+/** The signed-in user, their current shop and role (null until onboarding is done), and every shop they belong to. */
 export interface MeDto {
   user: {
     id: string
@@ -11,8 +11,10 @@ export interface MeDto {
     /** Verified, E.164; null until added. */
     phoneNumber: string | null
   }
+  /** The current shop: the only one they belong to. Null with none, or with several (choosing isn't available yet). */
   shop: ShopProfileDto | null
   role: MemberRole | null
+  memberships: { shop: ShopProfileDto, role: MemberRole }[]
 }
 
 export interface SlugAvailabilityDto {

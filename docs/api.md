@@ -45,7 +45,7 @@ request schemas are in [`shared/schemas/queue.ts`](../shared/schemas/queue.ts).
 | 401 | `UNAUTHENTICATED` — no valid session |
 | 403 | `FORBIDDEN` — signed in, but not a member of the shop · `INSUFFICIENT_ROLE` — a member whose role can't do this · `ACCOUNT_NOT_VERIFIED` · `FORBIDDEN_ORIGIN` — sent by another website |
 | 404 | `SHOP_NOT_FOUND`, `SERVICE_NOT_FOUND`, `BARBER_NOT_FOUND`, `ENTRY_NOT_FOUND` |
-| 409 | `ALREADY_HAS_SHOP`, `SLUG_TAKEN`, `ALREADY_IN_QUEUE`, `BARBER_BUSY`, `INVALID_TRANSITION`, `NO_BARBER_AVAILABLE`, `SHOP_CLOSED`, `SLOT_TAKEN`, `SLOT_UNAVAILABLE`, `ALREADY_BOOKED` |
+| 409 | `SHOP_SELECTION_REQUIRED`, `ALREADY_HAS_SHOP`, `SLUG_TAKEN`, `ALREADY_IN_QUEUE`, `BARBER_BUSY`, `INVALID_TRANSITION`, `NO_BARBER_AVAILABLE`, `SHOP_CLOSED`, `SLOT_TAKEN`, `SLOT_UNAVAILABLE`, `ALREADY_BOOKED` |
 | 429 | `RATE_LIMITED` — too many public joins or bookings; see `Retry-After` |
 | 500 | `INTERNAL_ERROR` |
 
@@ -328,27 +328,45 @@ Every other endpoint that needs a signed-in user requires a verified email **or*
 
 ### Roles and who can do what
 
-A shop's people are in `shop_members` (`shop_id`, `user_id`, `role`). The creator of a shop is its
-`OWNER`; `BARBER` members can't be added from the app yet. For now a person belongs to one shop.
+People and shops are linked many-to-many by `shop_members` (`id`, `shop_id`, `user_id`, `role`,
+timestamps). Nothing about shops is stored on the Better Auth user.
 
-| Action | OWNER | BARBER |
-|---|---|---|
-| Queue, walk-ins, start/complete/cancel/no-show, payments | ✓ | ✓ |
-| Appointments (list, book, check in, cancel, no-show) | ✓ | ✓ |
-| `GET /api/dashboard`, `GET /api/dashboard/hours`, notifications | ✓ | ✓ |
-| Open/close the shop (`PATCH /api/dashboard/shop`) | ✓ | 403 `INSUFFICIENT_ROLE` |
-| Services (`/api/dashboard/services*`), `PUT /api/dashboard/hours` | ✓ | 403 `INSUFFICIENT_ROLE` |
-| Reports (`GET /api/reports`) | ✓ | 403 `INSUFFICIENT_ROLE` |
+- **Constraints:** a person is in a shop at most once (`unique (shop_id, user_id)`); one `OWNER` per
+  shop (partial unique index); foreign keys to `shops` and `user`, deleted with either. Indexed by
+  `user_id` (looked up on every request) and by `shop_id` (the unique key leads with it).
+- **Creating a shop** makes the creator its `OWNER`, in the same transaction. For now someone who
+  already belongs to a shop can't create another (409 `ALREADY_HAS_SHOP`); the check is locked per
+  person, so a double-click can't create two.
+- `BARBER` and `RECEPTIONIST` members can't be added from the app yet (no invitations).
+
+| Action | OWNER | BARBER | RECEPTIONIST |
+|---|---|---|---|
+| Queue, walk-ins, start/complete/cancel/no-show, payments | ✓ | ✓ | ✓ |
+| Appointments (list, book, check in, cancel, no-show) | ✓ | ✓ | ✓ |
+| `GET /api/dashboard`, `GET /api/dashboard/hours`, notifications | ✓ | ✓ | ✓ |
+| Open/close the shop (`PATCH /api/dashboard/shop`) | ✓ | 403 `INSUFFICIENT_ROLE` | 403 |
+| Services (`/api/dashboard/services*`), `PUT /api/dashboard/hours` | ✓ | 403 `INSUFFICIENT_ROLE` | 403 |
+| Reports (`GET /api/reports`) | ✓ | 403 `INSUFFICIENT_ROLE` | 403 |
+
+**Which shop a request is about** (signed-in user → membership → shop):
+
+- Routes with a shop in the URL (`/api/shops/:shopId/…`) use that shop, only after checking the
+  user belongs to it.
+- Dashboard routes (`/api/dashboard*`, `/api/queue/*`, `/api/reports`) use the user's only shop. A
+  person in several shops gets 409 `SHOP_SELECTION_REQUIRED` there: choosing a shop isn't in the
+  app yet, and the server never guesses.
 
 Server helpers ([`server/utils/session.ts`](../server/utils/session.ts)): `getCurrentUser`,
-`requireUser` (401/403), `requireShopMember` (403 `FORBIDDEN`), `requireRole` (403
-`INSUFFICIENT_ROLE`) and `getShopMember` (for public routes with a member view).
+`requireUser` (401/403), `requireShopMember` (403 `FORBIDDEN`, 409 when ambiguous), `requireRole`
+(403 `INSUFFICIENT_ROLE`), `requireShop` (adds the shop's profile) and `getShopMember` (for public
+routes with a member view).
 
 ### `GET /api/me`
 
 - **Auth:** signed in.
-- **200:** `{ "data": { "user": { "id", "name", "email" | null, "phoneNumber" | null }, "shop": ShopProfile | null, "role": "OWNER" | "BARBER" | null } }`.
-  `shop` and `role` are null until onboarding is done.
+- **200:** `{ "data": { "user": { "id", "name", "email" | null, "phoneNumber" | null }, "shop": ShopProfile | null, "role": "OWNER" | "BARBER" | "RECEPTIONIST" | null, "memberships": [{ "shop": ShopProfile, "role" }] } }`.
+  `memberships` lists every shop the user belongs to. `shop` and `role` are the current shop: the
+  only one, or null with none (before onboarding) or with several.
 
 **Errors:** 401 `UNAUTHENTICATED` · 403 `ACCOUNT_NOT_VERIFIED`.
 

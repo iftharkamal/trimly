@@ -1,33 +1,47 @@
 // Who belongs to which shop, and as what (shop_members). The user id always
 // comes from the server-side session, never from a request.
-import { and, eq } from 'drizzle-orm'
+import { and, asc, eq, sql } from 'drizzle-orm'
 import type { MemberRole } from '../../shared/constants'
 import { useDb, type Transaction } from '../db'
 import { shopMembers } from '../db/schema'
 
 export interface Membership {
+  id: string
   shopId: string
   role: MemberRole
 }
 
-/** The user's shop and role (MVP: a person belongs to at most one shop), or null. */
-export async function findMembership(userId: string): Promise<Membership | null> {
-  const member = await useDb().query.shopMembers.findFirst({
+const COLUMNS = { id: true, shopId: true, role: true } as const
+
+/** Every shop the user belongs to, oldest membership first. */
+export async function listMemberships(userId: string): Promise<Membership[]> {
+  return useDb().query.shopMembers.findMany({
     where: eq(shopMembers.userId, userId),
-    columns: { shopId: true, role: true }
+    columns: COLUMNS,
+    orderBy: [asc(shopMembers.createdAt), asc(shopMembers.id)]
   })
-  return member ?? null
 }
 
-/** The user's role in one particular shop, or null if they don't belong to it. */
+/** The user's membership in one particular shop, or null if they don't belong to it. */
 export async function findMembershipInShop(userId: string, shopId: string): Promise<Membership | null> {
   const member = await useDb().query.shopMembers.findFirst({
     where: and(eq(shopMembers.userId, userId), eq(shopMembers.shopId, shopId)),
-    columns: { shopId: true, role: true }
+    columns: COLUMNS
   })
   return member ?? null
 }
 
 export async function addMember(tx: Transaction, input: { shopId: string, userId: string, role: MemberRole }): Promise<void> {
   await tx.insert(shopMembers).values(input)
+}
+
+/**
+ * Within a transaction: waits for any other transaction working on this
+ * user's memberships, then says whether they already belong to a shop. Two
+ * requests at once (a double-click) can't both see "no".
+ */
+export async function lockAndCheckHasMembership(tx: Transaction, userId: string): Promise<boolean> {
+  await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`shop_members:${userId}`}, 0))`)
+  const existing = await tx.query.shopMembers.findFirst({ where: eq(shopMembers.userId, userId), columns: { id: true } })
+  return existing !== undefined
 }

@@ -106,7 +106,8 @@ describe('MVP core flow', () => {
   it('8. customers find the shop and join the queue', async () => {
     const found = await request('GET', `/api/shops/by-slug/${shop.slug}`)
     expect(found.json.data).toMatchObject({ id: shop.id, isOpen: true })
-    expect((await page(`/shop/${shop.slug}`)).status).toBe(200)
+    // As a customer arrives by scanning the shop's QR code (opens the join form).
+    expect((await page(`/shop/${shop.slug}?join=1`)).status).toBe(200)
     const menu = (await request('GET', `/api/shops/${shop.id}/services`)).json.data
     expect(menu).toEqual([{ id: serviceId, name: 'Haircut', durationMinutes: 20, priceMinor: 15000 }])
 

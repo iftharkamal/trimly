@@ -25,7 +25,11 @@ describe('a receptionist', () => {
 
   it('is told their role', async () => {
     expect((await request('GET', '/api/me', { cookie: receptionist.cookie })).json.data).toMatchObject({ role: 'RECEPTIONIST', shop: { id: shop.shopId } })
-    expect((await request('GET', '/api/dashboard', { cookie: receptionist.cookie })).json.data.member).toEqual({ name: 'Meera', role: 'RECEPTIONIST' })
+    const dashboard = (await request('GET', '/api/dashboard', { cookie: receptionist.cookie })).json.data
+    expect(dashboard.member).toEqual({ name: 'Meera', role: 'RECEPTIONIST' })
+    // The shop's owner is someone else (from shop_members), not the signed-in member.
+    expect(dashboard.owner).toEqual({ name: 'Test Owner' })
+    expect(dashboard.shop.id).toBe(shop.shopId)
   })
 
   it('runs the front desk: walk-ins, the queue, appointments', async () => {

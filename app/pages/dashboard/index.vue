@@ -339,6 +339,13 @@ async function onConfirm() {
           </div>
         </section>
       </template>
+
+      <ShopInfoCard
+        v-if="dashboard"
+        :shop="dashboard.shop"
+        :owner-name="dashboard.owner?.name ?? null"
+        :member-role="dashboard.member.role"
+      />
     </template>
 
     <AddCustomerModal

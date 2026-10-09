@@ -447,14 +447,15 @@ The shop behind a `/shop/:slug` link.
 
 ### `GET /api/dashboard`
 
-- **Auth:** member (owner or barber). `member` is who is signed in: `{ "name", "role" }`.
+- **Auth:** member (owner, barber or receptionist). The shop comes from the session (`getCurrentShopContext`: user → membership → shop). `member` is who is signed in; `owner` is the shop's OWNER.
 - **200:**
 
 ```json
 {
   "data": {
-    "shop": { "id": "5b0c…", "name": "Faisal Barber", "slug": "faisal-barber", "timezone": "Asia/Kolkata", "currency": "INR", "isOpen": true },
+    "shop": { "id": "5b0c…", "name": "Faisal Barber", "slug": "faisal-barber", "phone": "+919876543210", "address": "MG Road, Kochi", "timezone": "Asia/Kolkata", "currency": "INR", "isOpen": true },
     "member": { "name": "Faisal", "role": "OWNER" },
+    "owner": { "name": "Faisal" },
     "barbers": [{ "id": "a1f2…", "name": "Faisal" }],
     "today": { "customers": 4, "servicesCompleted": 1, "revenueMinor": 15000 }
   }
@@ -465,7 +466,7 @@ The shop behind a `/shop/:slug` link.
 joined today and weren't cancelled or marked no-show. `revenueMinor` is the total of
 `PAID` payments received today (services completed without payment don't count).
 
-**Errors:** 401 `UNAUTHENTICATED` · 403 `FORBIDDEN`.
+**Errors:** 401 `UNAUTHENTICATED` · 403 `FORBIDDEN` (no shop yet) · 409 `SHOP_SELECTION_REQUIRED`.
 
 ### `PATCH /api/dashboard/shop`
 

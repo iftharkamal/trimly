@@ -9,6 +9,10 @@ export interface DashboardDto {
     name: string
     role: MemberRole
   }
+  /** Who owns the shop (the signed-in member, unless they're staff). */
+  owner: {
+    name: string
+  } | null
   /** Barbers who can take customers (for booking and walk-ins). */
   barbers: { id: string, name: string }[]
   today: {

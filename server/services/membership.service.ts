@@ -3,7 +3,7 @@
 import { and, asc, eq, sql } from 'drizzle-orm'
 import type { MemberRole } from '../../shared/constants'
 import { useDb, type Transaction } from '../db'
-import { shopMembers } from '../db/schema'
+import { shopMembers, user } from '../db/schema'
 
 export interface Membership {
   id: string
@@ -44,4 +44,15 @@ export async function lockAndCheckHasMembership(tx: Transaction, userId: string)
   await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`shop_members:${userId}`}, 0))`)
   const existing = await tx.query.shopMembers.findFirst({ where: eq(shopMembers.userId, userId), columns: { id: true } })
   return existing !== undefined
+}
+
+/** The shop's OWNER (one per shop), or null. */
+export async function findShopOwner(shopId: string): Promise<{ userId: string, name: string } | null> {
+  const [owner] = await useDb()
+    .select({ userId: user.id, name: user.name })
+    .from(shopMembers)
+    .innerJoin(user, eq(user.id, shopMembers.userId))
+    .where(and(eq(shopMembers.shopId, shopId), eq(shopMembers.role, 'OWNER')))
+    .limit(1)
+  return owner ?? null
 }

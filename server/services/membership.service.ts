@@ -31,8 +31,13 @@ export async function findMembershipInShop(userId: string, shopId: string): Prom
   return member ?? null
 }
 
-export async function addMember(tx: Transaction, input: { shopId: string, userId: string, role: MemberRole }): Promise<void> {
-  await tx.insert(shopMembers).values(input)
+/** Adds a member inside the caller's transaction; returns the membership id. */
+export async function addMember(tx: Transaction, input: { shopId: string, userId: string, role: MemberRole }): Promise<string> {
+  const [member] = await tx.insert(shopMembers).values(input).returning({ id: shopMembers.id })
+  if (!member) {
+    throw new Error('Failed to add member')
+  }
+  return member.id
 }
 
 /**
@@ -40,6 +45,15 @@ export async function addMember(tx: Transaction, input: { shopId: string, userId
  * user's memberships, then says whether they already belong to a shop. Two
  * requests at once (a double-click) can't both see "no".
  */
+/**
+ * Within a transaction: waits for any other transaction changing this user's
+ * memberships (creating a shop, joining one as staff), then returns them.
+ */
+export async function lockMemberships(tx: Transaction, userId: string): Promise<Membership[]> {
+  await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`shop_members:${userId}`}, 0))`)
+  return tx.query.shopMembers.findMany({ where: eq(shopMembers.userId, userId), columns: COLUMNS })
+}
+
 export async function lockAndCheckHasMembership(tx: Transaction, userId: string): Promise<boolean> {
   await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`shop_members:${userId}`}, 0))`)
   const existing = await tx.query.shopMembers.findFirst({ where: eq(shopMembers.userId, userId), columns: { id: true } })

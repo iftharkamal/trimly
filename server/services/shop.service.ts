@@ -170,8 +170,9 @@ export async function createShopWithOwner(input: NewShopInput): Promise<ShopProf
         if (!shop) {
           throw new Error('Failed to create shop')
         }
-        await addMember(tx, { shopId: shop.id, userId: input.ownerUserId, role: 'OWNER' })
-        await createBarber(tx, shop.id, input.barberName)
+        const ownerMemberId = await addMember(tx, { shopId: shop.id, userId: input.ownerUserId, role: 'OWNER' })
+        // The owner's own chair.
+        await createBarber(tx, shop.id, input.barberName, { memberId: ownerMemberId })
         await tx.insert(shopHours).values(DEFAULT_OPENING_HOURS.map(hours => ({ ...hours, shopId: shop.id })))
         return shop.id
       })

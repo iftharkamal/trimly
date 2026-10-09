@@ -64,6 +64,13 @@
       "when": 1791527628768,
       "tag": "0008_multi_shop_memberships",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1791537426981,
+      "tag": "0009_staff_chairs",
+      "breakpoints": true
     }
   ]
 }

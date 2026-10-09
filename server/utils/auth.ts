@@ -6,6 +6,7 @@ import * as schema from '../db/schema'
 import { sendEmailInBackground } from '../services/email/email.service'
 import { passwordResetEmail, verificationEmail } from '../services/email/templates'
 import { sendSmsInBackground } from '../services/sms/sms.service'
+import { claimStaffInvites } from '../services/staff.service'
 import { authBeforeHook } from './auth-hooks'
 import { isAllowedPhoneNumber, isPlaceholderEmail, otpMessage, placeholderEmailFor } from './phone-identity'
 import { configuredTrustedOrigins } from './request-origin'
@@ -91,6 +92,10 @@ function createAuth() {
         },
         // A number with no account creates one (OTP sign-up), with an
         // internal placeholder email; the name can be set right after.
+        // A verified number may be one an owner added a barber with: link that chair.
+        callbackOnVerification: async ({ phoneNumber: verified, user }) => {
+          await claimStaffInvites(verified, user.id)
+        },
         signUpOnVerification: {
           getTempEmail: placeholderEmailFor,
           getTempName: phone => phone

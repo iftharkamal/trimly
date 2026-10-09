@@ -344,7 +344,10 @@ timestamps). Nothing about shops is stored on the Better Auth user.
 | Queue, walk-ins, start/complete/cancel/no-show, payments | ✓ | ✓ | ✓ |
 | Appointments (list, book, check in, cancel, no-show) | ✓ | ✓ | ✓ |
 | `GET /api/dashboard`, `GET /api/dashboard/hours`, notifications | ✓ | ✓ | ✓ |
-| Open/close the shop (`PATCH /api/dashboard/shop`) | ✓ | 403 `INSUFFICIENT_ROLE` | 403 |
+| Open/close the shop (`PATCH /api/dashboard/shop` `isOpen`) | ✓ | ✓ while the owner allows it | ✓ while the owner allows it |
+| Allow staff to open/close (`staffCanOpenClose`) | ✓ | 403 `INSUFFICIENT_ROLE` | 403 |
+| Time between customers (`PATCH /api/dashboard/shop` `serviceBufferMinutes`) | ✓ | 403 `INSUFFICIENT_ROLE` | 403 |
+| Today's takings (`today.revenueMinor` on `GET /api/dashboard`) | ✓ | `null` | `null` |
 | View services (`GET /api/shop/services`) | ✓ | ✓ | ✓ |
 | Add, edit, archive or delete services (`/api/shop/services*`), `PUT /api/dashboard/hours` | ✓ | 403 `INSUFFICIENT_ROLE` | 403 |
 | Staff (`/api/shop/staff*`) | ✓ | 403 `INSUFFICIENT_ROLE` | 403 |
@@ -520,18 +523,21 @@ The shop behind a `/shop/:slug` link.
 
 "Today" is the current calendar day in the shop's timezone. `customers` counts people who
 joined today and weren't cancelled or marked no-show. `revenueMinor` is the total of
-`PAID` payments received today (services completed without payment don't count).
+`PAID` payments received today (services completed without payment don't count). It's sent to the
+OWNER only; for barbers and receptionists it's `null`.
 
 **Errors:** 401 `UNAUTHENTICATED` · 403 `FORBIDDEN` (no shop yet) · 409 `SHOP_SELECTION_REQUIRED`.
 
 ### `PATCH /api/dashboard/shop`
 
-The shop's queue settings.
+The shop's queue settings, for the session's shop.
 
-- **Auth:** owner only; the shop comes from the session.
 - **Body** (strict, at least one):
-  - `isOpen`: boolean. Open or close the shop to online joins; walk-ins can always be added.
-  - `serviceBufferMinutes`: whole minutes, 0–60 (default 5). The gap between one customer finishing
+  - `isOpen`: boolean. Open or close the shop to online joins; walk-ins can always be added. The
+    **owner** always; **staff** (barbers, receptionists) while `staffCanOpenClose` is on, so whoever
+    opens up in the morning can switch it on. When it's off, staff get 403 `INSUFFICIENT_ROLE`.
+  - `staffCanOpenClose`: boolean, **OWNER only** (default `true`; Settings → Staff permissions).
+  - `serviceBufferMinutes`: **OWNER only**; whole minutes, 0–60 (default 5). The gap between one customer finishing
     and the next starting (cleaning up, taking payment). It's added after every service in every
     waiting-time estimate, so changing it updates all ETAs on the next refresh, for staff and on
     customers' tracking links.

@@ -20,6 +20,7 @@ export default defineApiHandler(async (event): Promise<DashboardDto> => {
     member: { name: user.name, role: membership.role, barberId: chairId },
     owner: owner ? { name: owner.name } : null,
     barbers,
-    today: { ...stats, revenueMinor }
+    // Takings are the owner's business: staff see the counts only.
+    today: { ...stats, revenueMinor: membership.role === 'OWNER' ? revenueMinor : null }
   }
 })

@@ -12,4 +12,6 @@ export interface ShopProfileDto {
   isOpen: boolean
   /** Minutes between one customer finishing and the next starting, used in ETAs. */
   serviceBufferMinutes: number
+  /** Whether staff (not only the owner) may open and close the shop. */
+  staffCanOpenClose: boolean
 }

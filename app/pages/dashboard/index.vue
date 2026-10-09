@@ -9,7 +9,6 @@ useHead({ title: 'Live queue · Trimly' })
 
 const {
   dashboard,
-  status: dashboardStatus,
   error: dashboardError,
   refresh: refreshDashboard,
   updatingOpen,
@@ -46,26 +45,30 @@ const greeting = computed(() => {
   return `${greetingFor(new Date(), timeZone.value)}, ${firstName}`
 })
 
+// Short: the phone already shows the date.
 const todayLabel = computed(() =>
-  new Intl.DateTimeFormat('en', { weekday: 'long', day: 'numeric', month: 'long', timeZone: timeZone.value })
+  new Intl.DateTimeFormat('en', { weekday: 'short', day: 'numeric', month: 'short', timeZone: timeZone.value })
     .format(new Date())
 )
 
-const stats = computed(() => {
+// Today's numbers in one quiet line under the queue. Takings: owner only (the server sends null to staff).
+const todaySummary = computed(() => {
   if (!dashboard.value) {
-    return []
+    return ''
   }
   const { today, shop } = dashboard.value
-  return [
-    { label: 'Customers today', value: String(today.customers) },
-    {
-      label: 'Revenue today',
-      value: formatMoney(today.revenueMinor, shop.currency),
-      hint: 'Payments received'
-    },
-    { label: 'Services completed', value: String(today.servicesCompleted) }
+  const parts = [
+    `${today.customers} ${today.customers === 1 ? 'customer' : 'customers'}`,
+    `${today.servicesCompleted} done`
   ]
+  if (today.revenueMinor !== null) {
+    parts.push(formatMoney(today.revenueMinor, shop.currency))
+  }
+  return `Today: ${parts.join(' · ')}`
 })
+
+// The owner always; staff while the owner allows it (Settings). The server checks too.
+const canOpenClose = computed(() => dashboard.value?.member.role === 'OWNER' || !!dashboard.value?.shop.staffCanOpenClose)
 
 // The signed-in barber's own chair first.
 const myBarberId = computed(() => dashboard.value?.member.barberId ?? null)
@@ -159,7 +162,7 @@ async function onConfirm() {
 </script>
 
 <template>
-  <UContainer class="space-y-6 py-6 sm:py-8">
+  <UContainer class="space-y-6 pt-6 pb-24 sm:pt-8">
     <!-- Dashboard failed entirely (e.g. no shop, or the server is unreachable) -->
     <UAlert
       v-if="dashboardError && !dashboard"
@@ -173,85 +176,45 @@ async function onConfirm() {
 
     <template v-else>
       <!-- Header -->
-      <header class="space-y-4">
-        <!-- Who and where, with the shop's QR code at the end, ready to show a customer. -->
-        <div class="flex items-center justify-between gap-4">
-          <div
-            v-if="dashboard"
-            class="min-w-0"
-          >
-            <p class="text-sm text-muted">
-              {{ todayLabel }} · {{ dashboard.shop.name }}
-            </p>
-            <h1 class="mt-1 text-2xl font-semibold tracking-tight text-highlighted sm:text-3xl">
-              {{ greeting }}
-            </h1>
+      <!-- Calm header: where and who, the shop's status at a glance, and the QR code. -->
+      <header class="flex items-center justify-between gap-4">
+        <div
+          v-if="dashboard"
+          class="min-w-0"
+        >
+          <div class="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted">
+            <span class="truncate">{{ todayLabel }} · {{ dashboard.shop.name }}</span>
+            <ShopStatusChip
+              :is-open="dashboard.shop.isOpen"
+              :saving="updatingOpen"
+              :editable="canOpenClose"
+              @change="setOpen"
+            />
           </div>
-          <div
-            v-else
-            class="space-y-2"
-          >
-            <USkeleton class="h-4 w-48" />
-            <USkeleton class="h-8 w-64" />
-          </div>
-
-          <UButton
-            v-if="dashboard"
-            icon="i-lucide-qr-code"
-            aria-label="Show the shop's QR code"
-            title="Shop QR code"
-            color="neutral"
-            variant="ghost"
-            class="shrink-0 rounded-xl p-3"
-            :ui="{ leadingIcon: 'size-7' }"
-            @click="qrOpen = true"
-          />
+          <h1 class="mt-1 text-2xl font-semibold tracking-tight text-highlighted sm:text-3xl">
+            {{ greeting }}
+          </h1>
+        </div>
+        <div
+          v-else
+          class="space-y-2"
+        >
+          <USkeleton class="h-4 w-48" />
+          <USkeleton class="h-8 w-64" />
         </div>
 
-        <div class="flex flex-wrap items-center justify-between gap-3">
-          <USwitch
-            v-if="dashboard"
-            :model-value="dashboard.shop.isOpen"
-            :loading="updatingOpen"
-            :disabled="updatingOpen || dashboard.member.role !== 'OWNER'"
-            :label="dashboard.shop.isOpen ? 'Open' : 'Closed'"
-            :description="dashboard.member.role === 'OWNER' ? 'Online joining' : 'Online joining (the owner switches this)'"
-            @update:model-value="value => setOpen(value)"
-          />
-          <UButton
-            label="Add Customer"
-            icon="i-lucide-plus"
-            color="neutral"
-            variant="outline"
-            size="lg"
-            :disabled="!queue"
-            @click="addOpen = true"
-          />
-        </div>
+        <UButton
+          v-if="dashboard"
+          icon="i-lucide-qr-code"
+          aria-label="Show the shop's QR code"
+          title="Shop QR code"
+          color="neutral"
+          variant="outline"
+          class="shrink-0 rounded-xl p-3"
+          :ui="{ leadingIcon: 'size-7' }"
+          @click="qrOpen = true"
+        />
       </header>
-
-      <!-- Summary -->
-      <section
-        class="grid grid-cols-3 gap-3 sm:gap-4"
-        aria-label="Today"
-      >
-        <template v-if="dashboard">
-          <StatCard
-            v-for="stat in stats"
-            :key="stat.label"
-            :label="stat.label"
-            :value="stat.value"
-            :hint="stat.hint"
-          />
-        </template>
-        <template v-else-if="dashboardStatus === 'pending' || dashboardStatus === 'idle'">
-          <USkeleton
-            v-for="n in 3"
-            :key="n"
-            class="h-24 rounded-lg"
-          />
-        </template>
-      </section>
 
       <!-- Queue: loading -->
       <div
@@ -360,6 +323,14 @@ async function onConfirm() {
         </section>
       </template>
 
+      <p
+        v-if="dashboard"
+        class="text-center text-sm text-muted"
+        aria-label="Today"
+      >
+        {{ todaySummary }}
+      </p>
+
       <ShopInfoCard
         v-if="dashboard"
         :shop="dashboard.shop"
@@ -367,6 +338,18 @@ async function onConfirm() {
         :member-role="dashboard.member.role"
       />
     </template>
+
+    <!-- The everyday action, in thumb reach above the tab bar. -->
+    <UButton
+      v-if="dashboard"
+      label="Walk-in"
+      icon="i-lucide-plus"
+      size="xl"
+      class="fixed right-4 bottom-[calc(5rem+env(safe-area-inset-bottom))] z-30 rounded-full px-5 shadow-lg lg:right-8 lg:bottom-8 print:hidden"
+      aria-label="Add a walk-in customer"
+      :disabled="!queue"
+      @click="addOpen = true"
+    />
 
     <ShopQrModal
       v-if="dashboard"

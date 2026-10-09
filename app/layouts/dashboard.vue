@@ -58,7 +58,7 @@ const accountMenu = computed<DropdownMenuItem[][]>(() => [
 
 <template>
   <div class="min-h-dvh">
-    <header class="sticky top-0 z-20 border-b border-default bg-default/85 backdrop-blur">
+    <header class="sticky top-0 z-20 border-b border-default bg-default/85 backdrop-blur print:hidden">
       <UContainer class="flex h-14 items-center justify-between gap-2">
         <div class="flex items-center gap-4 sm:gap-6">
           <NuxtLink
@@ -135,13 +135,13 @@ const accountMenu = computed<DropdownMenuItem[][]>(() => [
     </header>
 
     <!-- Room for the bottom bar (and the phone's home indicator) below the content. -->
-    <main class="pb-[calc(4rem+env(safe-area-inset-bottom))] lg:pb-0">
+    <main class="pb-[calc(4rem+env(safe-area-inset-bottom))] lg:pb-0 print:pb-0">
       <slot />
     </main>
 
     <!-- Phones and tablets: sections as a bottom tab bar, in thumb reach. -->
     <nav
-      class="fixed inset-x-0 bottom-0 z-20 border-t border-default bg-default/90 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden"
+      class="fixed inset-x-0 bottom-0 z-20 border-t border-default bg-default/90 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden print:hidden"
       aria-label="Dashboard"
     >
       <ul

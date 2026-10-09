@@ -33,6 +33,14 @@ export default defineNuxtConfig({
 
   css: ['~/assets/css/main.css'],
 
+  runtimeConfig: {
+    public: {
+      // The address customers use (QR codes, shared links). Override at runtime
+      // with NUXT_PUBLIC_SITE_URL; see app/composables/usePublicSiteUrl.ts.
+      siteUrl: process.env.NUXT_PUBLIC_SITE_URL || process.env.BETTER_AUTH_URL || ''
+    }
+  },
+
   // The sign-in pages moved under /auth. Old links (bookmarks, verification
   // emails already sent) still work.
   routeRules: {

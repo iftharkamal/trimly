@@ -16,9 +16,3 @@ export interface MeDto {
   role: MemberRole | null
   memberships: { shop: ShopProfileDto, role: MemberRole }[]
 }
-
-export interface SlugAvailabilityDto {
-  /** The normalized link name that was checked. */
-  slug: string
-  available: boolean
-}

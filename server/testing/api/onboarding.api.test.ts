@@ -16,10 +16,9 @@ function uniqueEmail(label: string) {
 function shopBody(overrides: Record<string, unknown> = {}) {
   return {
     name: 'Kochi Cuts',
-    slug: `kochi-cuts-${randomUUID().slice(0, 6)}`,
-    timezone: 'Asia/Kolkata',
+    phone: '98765 43210',
+    address: 'MG Road, Kochi',
     currency: 'INR',
-    barberName: 'Arjun',
     ...overrides
   }
 }
@@ -171,59 +170,86 @@ describe('shop onboarding', () => {
   it('requires a signed-in user', async () => {
     expectError(await request('GET', '/api/me'), 401, 'UNAUTHENTICATED')
     expectError(await request('POST', '/api/onboarding/shop', { body: shopBody() }), 401, 'UNAUTHENTICATED')
-    expectError(await request('GET', '/api/onboarding/slug?slug=anything'), 401, 'UNAUTHENTICATED')
   })
 
-  it('creates the shop, its first barber and opening hours for the signed-in user', async () => {
-    const { cookie, userId } = await signUp(uniqueEmail('owner'))
-    const body = shopBody()
+  it('creates the shop with the user as OWNER, and returns it', async () => {
+    const { cookie } = await signUp(uniqueEmail('owner'), 'Arjun Nair')
 
-    const created = await request('POST', '/api/onboarding/shop', { body, cookie })
+    const created = await request('POST', '/api/onboarding/shop', { body: shopBody({ timezone: 'Asia/Dubai', currency: 'aed' }), cookie })
+
     expect(created.status).toBe(201)
-    expect(created.json.data).toMatchObject({ name: 'Kochi Cuts', slug: body.slug, timezone: 'Asia/Kolkata', currency: 'INR', isOpen: true })
-
-    expect((await request('GET', '/api/me', { cookie })).json.data.shop).toMatchObject({ slug: body.slug })
+    expect(created.json.data).toEqual({
+      id: expect.any(String),
+      name: 'Kochi Cuts',
+      // Generated from the name.
+      slug: expect.stringMatching(/^kochi-cuts(-[a-z2-9]{4})?$/),
+      phone: '+919876543210',
+      address: 'MG Road, Kochi',
+      timezone: 'Asia/Dubai',
+      currency: 'AED',
+      isOpen: true
+    })
+    const me = (await request('GET', '/api/me', { cookie })).json.data
+    expect(me).toMatchObject({ role: 'OWNER', shop: { id: created.json.data.id }, memberships: [{ role: 'OWNER' }] })
+    // Ready to use: the owner is the first barber, with default opening hours.
     const dashboard = await request('GET', '/api/dashboard', { cookie })
-    expect(dashboard.status).toBe(200)
-    expect(dashboard.json.data.barbers).toEqual([expect.objectContaining({ name: 'Arjun' })])
+    expect(dashboard.json.data.barbers).toEqual([expect.objectContaining({ name: 'Arjun Nair' })])
     const hours = await request('GET', '/api/dashboard/hours', { cookie })
     expect(hours.json.data.days.filter((day: { ranges: unknown[] }) => day.ranges.length > 0)).toHaveLength(6)
-
-    // The owner is the session's user: a body can't choose one.
-    expectError(
-      await request('POST', '/api/onboarding/shop', { body: shopBody({ ownerUserId: userId }), cookie }),
-      400,
-      'VALIDATION_ERROR'
-    )
-    // One shop per account.
-    expectError(await request('POST', '/api/onboarding/shop', { body: shopBody(), cookie }), 409, 'ALREADY_HAS_SHOP')
   })
 
-  it('validates the shop details', async () => {
-    const { cookie } = await signUp(uniqueEmail('picky'))
-    for (const invalid of [
-      { timezone: 'Mars/Olympus' },
-      { currency: 'XYZ' },
-      { slug: 'no' },
-      { slug: 'Has Spaces' },
-      { name: '' }
-    ]) {
-      expectError(await request('POST', '/api/onboarding/shop', { body: shopBody(invalid), cookie }), 400, 'VALIDATION_ERROR')
+  it('defaults the timezone to India and treats an empty address as none', async () => {
+    const { cookie } = await signUp(uniqueEmail('defaults'))
+    const created = await request('POST', '/api/onboarding/shop', { body: { name: 'Plain Cuts', phone: '+91 484 234 5678', currency: 'INR' }, cookie })
+    expect(created.json.data).toMatchObject({ timezone: 'Asia/Kolkata', phone: '+914842345678', address: null })
+  })
+
+  it('creates one shop however many times it is submitted', async () => {
+    const { cookie } = await signUp(uniqueEmail('double-click'))
+
+    // Five at once (a double-click, a flaky network retrying), then once more later.
+    const responses = await Promise.all(Array.from({ length: 5 }, () => request('POST', '/api/onboarding/shop', { body: shopBody(), cookie })))
+    expect(responses.filter(response => response.status === 201)).toHaveLength(1)
+    for (const response of responses.filter(response => response.status !== 201)) {
+      expectError(response, 409, 'ALREADY_HAS_SHOP')
     }
+    expectError(await request('POST', '/api/onboarding/shop', { body: shopBody(), cookie }), 409, 'ALREADY_HAS_SHOP')
+    expect((await request('GET', '/api/me', { cookie })).json.data.memberships).toHaveLength(1)
   })
 
-  it('keeps link names unique', async () => {
+  it('validates the shop details, field by field', async () => {
+    const { cookie, userId } = await signUp(uniqueEmail('picky'))
+    for (const [invalid, field] of [
+      [{ name: '' }, 'name'],
+      [{ name: 'x'.repeat(61) }, 'name'],
+      [{ phone: '' }, 'phone'],
+      [{ phone: '12345' }, 'phone'],
+      [{ phone: '484 234 5678' }, 'phone'],
+      [{ address: 'x'.repeat(201) }, 'address'],
+      [{ currency: 'XYZ' }, 'currency'],
+      [{ timezone: 'Mars/Olympus' }, 'timezone']
+    ] as const) {
+      const response = await request('POST', '/api/onboarding/shop', { body: shopBody(invalid), cookie })
+      expectError(response, 400, 'VALIDATION_ERROR')
+      expect(response.json.error.details.map((detail: { path: string }) => detail.path), field).toContain(field)
+    }
+    // The owner, the link name and the barber are not the client's to choose.
+    for (const extra of [{ ownerUserId: userId }, { slug: 'my-link' }, { barberName: 'Someone' }, { role: 'OWNER' }]) {
+      expectError(await request('POST', '/api/onboarding/shop', { body: shopBody(extra), cookie }), 400, 'VALIDATION_ERROR')
+    }
+    expect((await request('GET', '/api/me', { cookie })).json.data.memberships).toEqual([])
+  })
+
+  it('gives shops with the same name different links', async () => {
     const first = await signUp(uniqueEmail('first'))
     const second = await signUp(uniqueEmail('second'))
-    const slug = `taken-${randomUUID().slice(0, 6)}`
+    const name = `Twin Cuts ${randomUUID().slice(0, 4)}`
 
-    expect((await request('GET', `/api/onboarding/slug?slug=${slug}`, { cookie: first.cookie })).json.data)
-      .toEqual({ slug, available: true })
-    await request('POST', '/api/onboarding/shop', { body: shopBody({ slug }), cookie: first.cookie })
+    const a = (await request('POST', '/api/onboarding/shop', { body: shopBody({ name }), cookie: first.cookie })).json.data
+    const b = (await request('POST', '/api/onboarding/shop', { body: shopBody({ name }), cookie: second.cookie })).json.data
 
-    expect((await request('GET', `/api/onboarding/slug?slug=${slug}`, { cookie: second.cookie })).json.data.available).toBe(false)
-    expect((await request('GET', '/api/onboarding/slug?slug=x', { cookie: second.cookie })).json.data.available).toBe(false)
-    expectError(await request('POST', '/api/onboarding/shop', { body: shopBody({ slug }), cookie: second.cookie }), 409, 'SLUG_TAKEN')
+    expect(a.slug).not.toBe(b.slug)
+    expect(b.slug.startsWith(a.slug)).toBe(true)
   })
 })
 

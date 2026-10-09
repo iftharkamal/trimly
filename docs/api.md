@@ -45,7 +45,7 @@ request schemas are in [`shared/schemas/queue.ts`](../shared/schemas/queue.ts).
 | 401 | `UNAUTHENTICATED` — no valid session |
 | 403 | `FORBIDDEN` — signed in, but not a member of the shop · `INSUFFICIENT_ROLE` — a member whose role can't do this · `ACCOUNT_NOT_VERIFIED` · `FORBIDDEN_ORIGIN` — sent by another website |
 | 404 | `SHOP_NOT_FOUND`, `SERVICE_NOT_FOUND`, `BARBER_NOT_FOUND`, `ENTRY_NOT_FOUND` |
-| 409 | `SHOP_SELECTION_REQUIRED`, `ALREADY_HAS_SHOP`, `SLUG_TAKEN`, `ALREADY_IN_QUEUE`, `BARBER_BUSY`, `INVALID_TRANSITION`, `NO_BARBER_AVAILABLE`, `SHOP_CLOSED`, `SLOT_TAKEN`, `SLOT_UNAVAILABLE`, `ALREADY_BOOKED` |
+| 409 | `SHOP_SELECTION_REQUIRED`, `ALREADY_HAS_SHOP`, `ALREADY_IN_QUEUE`, `BARBER_BUSY`, `INVALID_TRANSITION`, `NO_BARBER_AVAILABLE`, `SHOP_CLOSED`, `SLOT_TAKEN`, `SLOT_UNAVAILABLE`, `ALREADY_BOOKED` |
 | 429 | `RATE_LIMITED` — too many public joins or bookings; see `Retry-After` |
 | 500 | `INTERNAL_ERROR` |
 
@@ -370,26 +370,35 @@ routes with a member view).
 
 **Errors:** 401 `UNAUTHENTICATED` · 403 `ACCOUNT_NOT_VERIFIED`.
 
-### `GET /api/onboarding/slug?slug=…`
-
-Whether a customer link name is free.
-
-- **Auth:** signed in.
-- **200:** `{ "data": { "slug": "faisal-barber", "available": true } }`.
-
-**Errors:** 400 `VALIDATION_ERROR` (3–40 lowercase letters, digits or dashes) · 401 · 403.
-
 ### `POST /api/onboarding/shop`
 
-Create the signed-in user's shop. The owner is always the session user; the body can't name one.
-In one transaction it creates the shop, makes the user its `OWNER` member, and adds its first barber and default opening hours
-(Mon–Sat 09:00–13:00 and 14:00–20:00, Sunday closed).
+First-time setup (the `/onboarding/shop` page): create the signed-in user's shop. In one
+transaction it creates the shop, makes the user its `OWNER` member, adds the user as its first
+barber and sets default opening hours (Mon–Sat 09:00–13:00 and 14:00–20:00, Sunday closed).
 
-- **Auth:** signed in, without a shop.
-- **Body** (strict): `{ "name", "slug", "timezone" (IANA), "currency" (ISO 4217), "barberName" }`.
-- **201:** the shop profile.
+- **Auth:** signed in, not yet in any shop.
+- **Body** (strict):
 
-**Errors:** 400 `VALIDATION_ERROR` · 401 · 403 `ACCOUNT_NOT_VERIFIED` · 409 `ALREADY_HAS_SHOP` · 409 `SLUG_TAKEN`.
+```json
+{ "name": "Faisal Barber", "phone": "98765 43210", "address": "MG Road, Kochi", "currency": "INR", "timezone": "Asia/Kolkata" }
+```
+
+  - `name`: 2–60 characters.
+  - `phone`: a 10-digit Indian mobile, or any number with its country code (landlines too); stored
+    as E.164.
+  - `address`: optional, up to 200 characters.
+  - `currency`: ISO 4217.
+  - `timezone`: optional IANA zone, sent by the browser; defaults to `Asia/Kolkata`.
+  - Not accepted: the owner, the link name or the barber (400): the owner is the session's user,
+    the link name (`slug`) is made from the shop name (with a short random suffix if taken), and
+    the first barber is the user.
+- **201:** the shop profile `{ "id", "name", "slug", "phone", "address", "timezone", "currency", "isOpen" }`.
+
+Repeated or simultaneous submissions create one shop: the rest get 409 `ALREADY_HAS_SHOP` (the
+check is locked per user). For now a person who belongs to a shop can't create another.
+
+**Errors:** 400 `VALIDATION_ERROR` (with `details` per field) · 401 · 403 `ACCOUNT_NOT_VERIFIED` ·
+409 `ALREADY_HAS_SHOP`.
 
 ## Managing services (owner)
 

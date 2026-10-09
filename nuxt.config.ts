@@ -38,7 +38,8 @@ export default defineNuxtConfig({
   routeRules: {
     '/login': { redirect: '/auth/login' },
     '/signup': { redirect: '/auth/signup' },
-    '/verify-email': { redirect: '/auth/verify' }
+    '/verify-email': { redirect: '/auth/verify' },
+    '/onboarding': { redirect: '/onboarding/shop' }
   },
 
   // Light until the user picks otherwise (remembered per device).

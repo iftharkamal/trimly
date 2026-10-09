@@ -39,7 +39,7 @@ export default defineNuxtRouteMiddleware(async (to) => {
     }))
   }
   if (to.meta.shop === 'required' && !me.value.shop) {
-    return navigateTo('/onboarding')
+    return navigateTo('/onboarding/shop')
   }
   if (to.meta.shop === 'none' && me.value.shop) {
     return navigateTo('/dashboard')

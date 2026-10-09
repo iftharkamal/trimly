@@ -14,8 +14,8 @@ async function createUser(id: string) {
   return id
 }
 
-function shopInput(ownerUserId: string, slug: string) {
-  return { ownerUserId, name: 'Kochi Cuts', slug, timezone: 'Asia/Kolkata', currency: 'INR', barberName: 'Arjun' }
+function shopInput(ownerUserId: string, name = 'Kochi Cuts') {
+  return { ownerUserId, barberName: 'Arjun', name, phone: '+919876543210', address: null, timezone: 'Asia/Kolkata', currency: 'INR' }
 }
 
 async function rejection(promise: Promise<unknown>): Promise<unknown> {
@@ -110,6 +110,27 @@ describe('createShopWithOwner', () => {
     expect((rejected?.reason as DomainError).code).toBe('ALREADY_HAS_SHOP')
     expect(await useDb().select().from(shops)).toHaveLength(1)
     expect(await listMemberships(creator)).toHaveLength(1)
+  })
+})
+
+describe('link names for new shops', () => {
+  it('come from the shop name, with a suffix when it\'s taken', async () => {
+    const first = await createShopWithOwner(shopInput(await createUser('first-owner'), 'Faisal\'s Barber Shop'))
+    const second = await createShopWithOwner(shopInput(await createUser('second-owner'), 'Faisal\'s Barber Shop'))
+
+    expect(first.slug).toBe('faisals-barber-shop')
+    expect(second.slug).toMatch(/^faisals-barber-shop-[a-z2-9]{4}$/)
+  })
+
+  it('are long enough for the shop page even for very short names', async () => {
+    const shop = await createShopWithOwner(shopInput(await createUser('short'), 'AB'))
+    expect(shop.slug).toBe('ab-shop')
+  })
+
+  it('stay unique when several shops with the same name are created at once', async () => {
+    const owners = await Promise.all(['a', 'b', 'c', 'd'].map(id => createUser(`rush-${id}`)))
+    const created = await Promise.all(owners.map(owner => createShopWithOwner(shopInput(owner, 'Rush Hour'))))
+    expect(new Set(created.map(shop => shop.slug)).size).toBe(4)
   })
 })
 

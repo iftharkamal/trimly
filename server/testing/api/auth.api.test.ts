@@ -124,7 +124,7 @@ describe('phone sign-up and sign-in (OTP)', () => {
     expect((await request('POST', '/api/auth/update-user', { cookie, body: { name: 'Nabil' } })).status).toBe(200)
     const shop = await request('POST', '/api/onboarding/shop', {
       cookie,
-      body: { name: 'Nabil Cuts', slug: `nabil-${randomUUID().slice(0, 6)}`, timezone: 'Asia/Kolkata', currency: 'INR', barberName: 'Nabil' }
+      body: { name: 'Nabil Cuts', phone: '98765 43210', currency: 'INR' }
     })
     expect(shop.status).toBe(201)
     expect((await me(cookie)).json.data).toMatchObject({ user: { name: 'Nabil' }, role: 'OWNER' })

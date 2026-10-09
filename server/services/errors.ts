@@ -15,7 +15,6 @@ export type DomainErrorCode =
   | 'INVALID_TIME'
   | 'SLOT_UNAVAILABLE'
   | 'ALREADY_HAS_SHOP'
-  | 'SLUG_TAKEN'
   | 'EMAIL_NOT_VERIFIED'
 
 /**

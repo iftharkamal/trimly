@@ -36,11 +36,15 @@ const allLinks = [
   { label: 'Queue', to: '/dashboard', icon: 'i-lucide-list-ordered', ownerOnly: false },
   { label: 'Appointments', to: '/dashboard/appointments', icon: 'i-lucide-calendar', ownerOnly: false },
   { label: 'Services', to: '/dashboard/services', icon: 'i-lucide-tags', ownerOnly: true },
-  { label: 'Staff', to: '/dashboard/staff', icon: 'i-lucide-users', ownerOnly: true },
-  { label: 'Reports', to: '/dashboard/reports', icon: 'i-lucide-chart-column', ownerOnly: true },
-  { label: 'Settings', to: '/dashboard/settings', icon: 'i-lucide-settings', ownerOnly: false }
+  { label: 'Reports', to: '/dashboard/reports', icon: 'i-lucide-chart-column', ownerOnly: true }
+  // Settings (and Staff under it, /dashboard/settings/staff) is in the account menu.
 ]
 const links = computed(() => allLinks.filter(link => !link.ownerOnly || role.value === 'OWNER'))
+
+// A section stays highlighted on its sub-pages (Settings → Staff); the queue only on itself.
+function isActive(to: string) {
+  return route.path === to || (to !== '/dashboard' && route.path.startsWith(`${to}/`))
+}
 
 const accountMenu = computed<DropdownMenuItem[][]>(() => [
   [
@@ -69,24 +73,22 @@ const accountMenu = computed<DropdownMenuItem[][]>(() => [
             <span class="hidden sm:inline">Trimly</span>
           </NuxtLink>
 
+          <!-- Wide screens: sections in the top bar. Phones and tablets use the bottom bar. -->
           <nav
-            class="flex items-center gap-1"
+            class="hidden items-center gap-1 lg:flex"
             aria-label="Dashboard"
           >
-            <!-- Icons only on small screens; labels from the md breakpoint. -->
             <UButton
               v-for="link in links"
               :key="link.to"
               :to="link.to"
               :icon="link.icon"
-              :aria-label="link.label"
+              :label="link.label"
               color="neutral"
-              :variant="route.path === link.to ? 'soft' : 'ghost'"
+              :variant="isActive(link.to) ? 'soft' : 'ghost'"
               size="sm"
-              :aria-current="route.path === link.to ? 'page' : undefined"
-            >
-              <span class="hidden md:inline">{{ link.label }}</span>
-            </UButton>
+              :aria-current="isActive(link.to) ? 'page' : undefined"
+            />
           </nav>
         </div>
 
@@ -132,8 +134,43 @@ const accountMenu = computed<DropdownMenuItem[][]>(() => [
       </UContainer>
     </header>
 
-    <main>
+    <!-- Room for the bottom bar (and the phone's home indicator) below the content. -->
+    <main class="pb-[calc(4rem+env(safe-area-inset-bottom))] lg:pb-0">
       <slot />
     </main>
+
+    <!-- Phones and tablets: sections as a bottom tab bar, in thumb reach. -->
+    <nav
+      class="fixed inset-x-0 bottom-0 z-20 border-t border-default bg-default/90 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden"
+      aria-label="Dashboard"
+    >
+      <ul
+        class="mx-auto grid max-w-xl"
+        :style="{ gridTemplateColumns: `repeat(${links.length}, minmax(0, 1fr))` }"
+      >
+        <li
+          v-for="link in links"
+          :key="link.to"
+        >
+          <NuxtLink
+            :to="link.to"
+            class="flex h-16 flex-col items-center justify-center gap-1 text-[11px] font-medium transition-colors"
+            :class="isActive(link.to) ? 'text-highlighted' : 'text-muted hover:text-highlighted'"
+            :aria-current="isActive(link.to) ? 'page' : undefined"
+          >
+            <span
+              class="grid h-7 w-12 place-items-center rounded-full transition-colors"
+              :class="isActive(link.to) ? 'bg-accented' : ''"
+            >
+              <UIcon
+                :name="link.icon"
+                class="size-5"
+              />
+            </span>
+            <span class="max-w-full truncate px-1">{{ link.label }}</span>
+          </NuxtLink>
+        </li>
+      </ul>
+    </nav>
   </div>
 </template>

@@ -8,6 +8,8 @@ export interface DashboardDto {
   member: {
     name: string
     role: MemberRole
+    /** The chair they work, if any: their lane in the queue. */
+    barberId: string | null
   }
   /** Who owns the shop (the signed-in member, unless they're staff). */
   owner: {

@@ -7,6 +7,39 @@ useHead({ title: 'Settings · Trimly' })
 const { hours, error, refresh, saving, save } = await useOpeningHours()
 const { me, refresh: refreshMe } = useCurrentUser()
 const toast = useToast()
+
+// The gap between customers in waiting-time estimates (owner only; checked on the server too).
+const BUFFER_OPTIONS = [0, 2, 5, 10, 15, 20, 30]
+const buffer = ref(me.value?.shop?.serviceBufferMinutes ?? 5)
+watch(() => me.value?.shop?.serviceBufferMinutes, (value) => {
+  if (value !== undefined) {
+    buffer.value = value
+  }
+})
+const bufferChoices = computed(() => [...new Set([...BUFFER_OPTIONS, buffer.value])]
+  .sort((a, b) => a - b)
+  .map(minutes => ({ label: minutes === 0 ? 'No gap' : `${minutes} minutes`, value: minutes })))
+const savingBuffer = ref(false)
+
+async function saveBuffer() {
+  savingBuffer.value = true
+  try {
+    await $fetch('/api/dashboard/shop', { method: 'PATCH', body: { serviceBufferMinutes: buffer.value } })
+    await refreshMe()
+    toast.add({
+      title: 'Saved',
+      description: buffer.value === 0 ? 'Waiting times now assume no gap between customers.' : `Waiting times now include a ${buffer.value}-minute gap between customers.`,
+      color: 'success',
+      icon: 'i-lucide-check'
+    })
+  }
+  catch (caught) {
+    toast.add({ title: 'Could not save', description: getApiErrorMessage(caught), color: 'error', icon: 'i-lucide-circle-alert' })
+  }
+  finally {
+    savingBuffer.value = false
+  }
+}
 // Only the owner edits the opening hours (the server enforces it too).
 const isOwner = computed(() => me.value?.role === 'OWNER')
 
@@ -61,6 +94,37 @@ async function onSave() {
     </h1>
 
     <template v-if="isOwner">
+      <UCard>
+        <template #header>
+          <h2 class="font-semibold text-highlighted">
+            Queue
+          </h2>
+          <p class="mt-1 text-sm text-muted">
+            How customers' waiting times are estimated.
+          </p>
+        </template>
+
+        <UFormField
+          label="Time between customers"
+          help="Added after each service in every waiting-time estimate: cleaning up, taking payment."
+        >
+          <div class="flex flex-wrap items-center gap-3">
+            <USelect
+              v-model="buffer"
+              :items="bufferChoices"
+              class="w-44"
+              :disabled="savingBuffer"
+            />
+            <UButton
+              label="Save"
+              :loading="savingBuffer"
+              :disabled="savingBuffer || buffer === me?.shop?.serviceBufferMinutes"
+              @click="saveBuffer"
+            />
+          </div>
+        </UFormField>
+      </UCard>
+
       <UAlert
         v-if="error && !hours"
         color="error"

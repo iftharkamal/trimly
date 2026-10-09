@@ -67,7 +67,9 @@ const stats = computed(() => {
   ]
 })
 
-const lanes = computed(() => queue.value?.barbers ?? [])
+// The signed-in barber's own chair first.
+const myBarberId = computed(() => dashboard.value?.member.barberId ?? null)
+const lanes = computed(() => [...(queue.value?.barbers ?? [])].sort((a, b) => Number(b.barber.id === myBarberId.value) - Number(a.barber.id === myBarberId.value)))
 const barbers = computed(() => lanes.value.map(lane => lane.barber).filter(barber => barber.isActive))
 
 const isQueueLoading = computed(() => !queue.value && (queueStatus.value === 'pending' || queueStatus.value === 'idle'))
@@ -296,9 +298,16 @@ async function onConfirm() {
         >
           <h2
             v-if="lanes.length > 1"
-            class="text-sm font-semibold text-toned"
+            class="flex items-center gap-2 text-sm font-semibold text-toned"
           >
             {{ lane.barber.name }}
+            <UBadge
+              v-if="lane.barber.id === myBarberId"
+              label="You"
+              color="primary"
+              variant="subtle"
+              size="sm"
+            />
           </h2>
 
           <div class="grid items-start gap-6 lg:grid-cols-5">

@@ -10,4 +10,6 @@ export interface ShopProfileDto {
   currency: string
   /** Taking online customers. */
   isOpen: boolean
+  /** Minutes between one customer finishing and the next starting, used in ETAs. */
+  serviceBufferMinutes: number
 }

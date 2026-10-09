@@ -16,11 +16,22 @@ export function listActiveBarbers(shopId: string): Promise<BarberSummary[]> {
     .orderBy(asc(barbers.createdAt))
 }
 
-/** Adds a barber to a shop, inside the caller's transaction. */
-export async function createBarber(tx: Transaction, shopId: string, name: string): Promise<BarberSummary> {
-  const [barber] = await tx.insert(barbers).values({ shopId, name }).returning({ id: barbers.id, name: barbers.name })
+/** Adds a barber (a chair) to a shop, inside the caller's transaction, optionally worked by a member. */
+export async function createBarber(
+  tx: Transaction,
+  shopId: string,
+  name: string,
+  link: { memberId?: string | null, invitePhone?: string | null } = {}
+): Promise<BarberSummary> {
+  const [barber] = await tx.insert(barbers).values({ shopId, name, ...link }).returning({ id: barbers.id, name: barbers.name })
   if (!barber) {
     throw new Error('Failed to create barber')
   }
   return barber
+}
+
+/** The chair this member works, or null (e.g. an owner who doesn't cut hair). */
+export async function findChairOfMember(memberId: string): Promise<string | null> {
+  const chair = await useDb().query.barbers.findFirst({ where: eq(barbers.memberId, memberId), columns: { id: true } })
+  return chair?.id ?? null
 }

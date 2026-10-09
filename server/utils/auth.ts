@@ -6,6 +6,7 @@ import * as schema from '../db/schema'
 import { sendEmailInBackground } from '../services/email/email.service'
 import { passwordResetEmail, verificationEmail } from '../services/email/templates'
 import { sendSmsInBackground } from '../services/sms/sms.service'
+import { claimStaffInvites } from '../services/staff.service'
 import { authBeforeHook } from './auth-hooks'
 import { isAllowedPhoneNumber, isPlaceholderEmail, otpMessage, placeholderEmailFor } from './phone-identity'
 import { configuredTrustedOrigins } from './request-origin'
@@ -19,6 +20,19 @@ export const CLIENT_IP_HEADER = 'x-trimly-client-ip'
 
 const DAY_SECONDS = 24 * 60 * 60
 const OTP_MINUTES = 5
+
+/**
+ * Every verification link returns to /auth/verify ("Email verified"). Links
+ * sent by a sign-in attempt before verifying would otherwise return to "/".
+ */
+function verificationLandsOnVerifyPage(url: string): string {
+  const link = new URL(url)
+  const callback = link.searchParams.get('callbackURL')
+  if (!callback || callback === '/') {
+    link.searchParams.set('callbackURL', '/auth/verify')
+  }
+  return link.toString()
+}
 
 // Never email the internal address of an account created by phone.
 function sendAccountEmail(to: string, message: { subject: string, text: string }) {
@@ -74,7 +88,7 @@ function createAuth() {
       sendOnSignIn: true,
       autoSignInAfterVerification: true,
       sendVerificationEmail: async ({ user, url }) => {
-        sendAccountEmail(user.email, verificationEmail({ name: user.name, url }))
+        sendAccountEmail(user.email, verificationEmail({ name: user.name, url: verificationLandsOnVerifyPage(url) }))
       }
     },
     plugins: [
@@ -91,6 +105,10 @@ function createAuth() {
         },
         // A number with no account creates one (OTP sign-up), with an
         // internal placeholder email; the name can be set right after.
+        // A verified number may be one an owner added a barber with: link that chair.
+        callbackOnVerification: async ({ phoneNumber: verified, user }) => {
+          await claimStaffInvites(verified, user.id)
+        },
         signUpOnVerification: {
           getTempEmail: placeholderEmailFor,
           getTempName: phone => phone

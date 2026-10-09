@@ -36,9 +36,8 @@ const allLinks = [
   { label: 'Queue', to: '/dashboard', icon: 'i-lucide-list-ordered', ownerOnly: false },
   { label: 'Appointments', to: '/dashboard/appointments', icon: 'i-lucide-calendar', ownerOnly: false },
   { label: 'Services', to: '/dashboard/services', icon: 'i-lucide-tags', ownerOnly: true },
-  { label: 'Reports', to: '/dashboard/reports', icon: 'i-lucide-chart-column', ownerOnly: true },
-  // Staff management lives under Settings (/dashboard/settings/staff).
-  { label: 'Settings', to: '/dashboard/settings', icon: 'i-lucide-settings', ownerOnly: false }
+  { label: 'Reports', to: '/dashboard/reports', icon: 'i-lucide-chart-column', ownerOnly: true }
+  // Settings (and Staff under it, /dashboard/settings/staff) is in the account menu.
 ]
 const links = computed(() => allLinks.filter(link => !link.ownerOnly || role.value === 'OWNER'))
 

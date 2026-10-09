@@ -36,18 +36,15 @@ const allLinks = [
   { label: 'Queue', to: '/dashboard', icon: 'i-lucide-list-ordered', ownerOnly: false },
   { label: 'Appointments', to: '/dashboard/appointments', icon: 'i-lucide-calendar', ownerOnly: false },
   { label: 'Services', to: '/dashboard/services', icon: 'i-lucide-tags', ownerOnly: true },
-  { label: 'Staff', to: '/dashboard/staff', icon: 'i-lucide-users', ownerOnly: true },
   { label: 'Reports', to: '/dashboard/reports', icon: 'i-lucide-chart-column', ownerOnly: true },
+  // Staff management lives under Settings (/dashboard/settings/staff).
   { label: 'Settings', to: '/dashboard/settings', icon: 'i-lucide-settings', ownerOnly: false }
 ]
 const links = computed(() => allLinks.filter(link => !link.ownerOnly || role.value === 'OWNER'))
 
-// The bottom bar holds up to 5 tabs; with more (owners), Settings stays in the account menu.
-const MAX_TABS = 5
-const tabs = computed(() => (links.value.length > MAX_TABS ? links.value.filter(link => link.to !== '/dashboard/settings') : links.value))
-
+// A section stays highlighted on its sub-pages (Settings → Staff); the queue only on itself.
 function isActive(to: string) {
-  return route.path === to
+  return route.path === to || (to !== '/dashboard' && route.path.startsWith(`${to}/`))
 }
 
 const accountMenu = computed<DropdownMenuItem[][]>(() => [
@@ -150,10 +147,10 @@ const accountMenu = computed<DropdownMenuItem[][]>(() => [
     >
       <ul
         class="mx-auto grid max-w-xl"
-        :style="{ gridTemplateColumns: `repeat(${tabs.length}, minmax(0, 1fr))` }"
+        :style="{ gridTemplateColumns: `repeat(${links.length}, minmax(0, 1fr))` }"
       >
         <li
-          v-for="link in tabs"
+          v-for="link in links"
           :key="link.to"
         >
           <NuxtLink

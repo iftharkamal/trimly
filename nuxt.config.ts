@@ -39,7 +39,9 @@ export default defineNuxtConfig({
     '/login': { redirect: '/auth/login' },
     '/signup': { redirect: '/auth/signup' },
     '/verify-email': { redirect: '/auth/verify' },
-    '/onboarding': { redirect: '/onboarding/shop' }
+    '/onboarding': { redirect: '/onboarding/shop' },
+    // Staff moved under Settings.
+    '/dashboard/staff': { redirect: '/dashboard/settings/staff' }
   },
 
   // Light until the user picks otherwise (remembered per device).

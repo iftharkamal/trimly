@@ -73,6 +73,15 @@ function actions(member: StaffMemberDto) {
 
 <template>
   <UContainer class="max-w-3xl space-y-6 py-6 sm:py-8">
+    <UButton
+      to="/dashboard/settings"
+      label="Settings"
+      icon="i-lucide-chevron-left"
+      color="neutral"
+      variant="link"
+      class="-ms-2 -mb-4 px-2"
+    />
+
     <header class="flex flex-wrap items-center justify-between gap-4">
       <div>
         <h1 class="text-2xl font-semibold tracking-tight text-highlighted sm:text-3xl">

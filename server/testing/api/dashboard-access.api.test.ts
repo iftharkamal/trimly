@@ -73,14 +73,14 @@ describe('dashboard access', () => {
     expect(response.html).not.toContain('Faisal')
   })
 
-  it('puts the sections in a bottom tab bar (Settings in the account menu for owners)', async () => {
+  it('puts the sections in a bottom tab bar, with Staff under Settings', async () => {
     const bottomTabs = (html: string) => {
       const bar = /<nav class="fixed inset-x-0 bottom-0[^"]*"[^>]*>([\s\S]*?)<\/nav>/.exec(html)?.[1] ?? ''
       return [...bar.matchAll(/href="([^"]+)"/g)].map(match => match[1])
     }
 
     const ownerPage = (await page('/dashboard', owner.cookie)).html
-    expect(bottomTabs(ownerPage)).toEqual(['/dashboard', '/dashboard/appointments', '/dashboard/services', '/dashboard/staff', '/dashboard/reports'])
+    expect(bottomTabs(ownerPage)).toEqual(['/dashboard', '/dashboard/appointments', '/dashboard/services', '/dashboard/reports', '/dashboard/settings'])
     // The current page is marked for screen readers.
     expect(ownerPage).toMatch(/<a[^>]*href="\/dashboard"[^>]*aria-current="page"|<a[^>]*aria-current="page"[^>]*href="\/dashboard"/)
 
@@ -88,6 +88,15 @@ describe('dashboard access', () => {
     const barber = await signUp(`access-tabs-${randomUUID().slice(0, 8)}@trimly.test`)
     await addMemberFixture(shop.shopId, barber.userId, 'BARBER')
     expect(bottomTabs((await page('/dashboard', barber.cookie)).html)).toEqual(['/dashboard', '/dashboard/appointments', '/dashboard/settings'])
+
+    // Staff opens from Settings, which stays the highlighted tab there.
+    expect((await page('/dashboard/settings', owner.cookie)).html).toContain('href="/dashboard/settings/staff"')
+    const staff = await page('/dashboard/settings/staff', owner.cookie)
+    expect(staff.status).toBe(200)
+    expect(staff.html).toMatch(/<a[^>]*href="\/dashboard\/settings"[^>]*aria-current="page"|<a[^>]*aria-current="page"[^>]*href="\/dashboard\/settings"/)
+    // Barbers can't open it; the old address still works.
+    expect(await page('/dashboard/settings/staff', barber.cookie)).toMatchObject({ status: 302, location: '/dashboard' })
+    expect(await page('/dashboard/staff', owner.cookie)).toMatchObject({ status: 307, location: '/dashboard/settings/staff' })
   })
 
   it('keeps the session across page refreshes', async () => {

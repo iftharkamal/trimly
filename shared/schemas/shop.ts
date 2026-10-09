@@ -18,7 +18,9 @@ export const updateShopBodySchema = z
       .int('Use whole minutes')
       .min(0, 'Can\'t be negative')
       .max(MAX_SERVICE_BUFFER_MINUTES, `At most ${MAX_SERVICE_BUFFER_MINUTES} minutes`)
-      .optional()
+      .optional(),
+    // Owner only: may barbers and receptionists open and close the shop?
+    staffCanOpenClose: z.boolean().optional()
   })
   .refine(body => Object.keys(body).length > 0, 'Change at least one setting')
 

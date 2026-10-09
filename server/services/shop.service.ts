@@ -20,9 +20,11 @@ export interface ShopProfile {
   isOpen: boolean
   /** Gap between customers (cleanup, payment), added to waiting-time estimates. */
   serviceBufferMinutes: number
+  /** Whether staff (not only the owner) may open and close the shop. */
+  staffCanOpenClose: boolean
 }
 
-const PROFILE_COLUMNS = { id: true, name: true, slug: true, phone: true, address: true, timezone: true, currency: true, isOpen: true, serviceBufferMinutes: true } as const
+const PROFILE_COLUMNS = { id: true, name: true, slug: true, phone: true, address: true, timezone: true, currency: true, isOpen: true, serviceBufferMinutes: true, staffCanOpenClose: true } as const
 
 export async function getShopProfile(shopId: string): Promise<ShopProfile> {
   const shop = await useDb().query.shops.findFirst({ where: eq(shops.id, shopId), columns: PROFILE_COLUMNS })
@@ -42,7 +44,7 @@ export async function getShopProfileBySlug(slug: string): Promise<ShopProfile> {
 }
 
 /** Changes the shop's settings: online joining on/off and the gap between customers. */
-export async function updateShopSettings(shopId: string, settings: { isOpen?: boolean, serviceBufferMinutes?: number }): Promise<ShopProfile> {
+export async function updateShopSettings(shopId: string, settings: { isOpen?: boolean, serviceBufferMinutes?: number, staffCanOpenClose?: boolean }): Promise<ShopProfile> {
   const [shop] = await useDb().update(shops).set(settings).where(eq(shops.id, shopId)).returning({
     id: shops.id,
     name: shops.name,
@@ -52,7 +54,8 @@ export async function updateShopSettings(shopId: string, settings: { isOpen?: bo
     timezone: shops.timezone,
     currency: shops.currency,
     isOpen: shops.isOpen,
-    serviceBufferMinutes: shops.serviceBufferMinutes
+    serviceBufferMinutes: shops.serviceBufferMinutes,
+    staffCanOpenClose: shops.staffCanOpenClose
   })
   if (!shop) {
     throw new DomainError('SHOP_NOT_FOUND', 404, 'Shop not found')

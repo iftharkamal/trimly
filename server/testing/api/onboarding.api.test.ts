@@ -188,7 +188,8 @@ describe('shop onboarding', () => {
       timezone: 'Asia/Dubai',
       currency: 'AED',
       isOpen: true,
-      serviceBufferMinutes: 5
+      serviceBufferMinutes: 5,
+      staffCanOpenClose: true
     })
     const me = (await request('GET', '/api/me', { cookie })).json.data
     expect(me).toMatchObject({ role: 'OWNER', shop: { id: created.json.data.id }, memberships: [{ role: 'OWNER' }] })

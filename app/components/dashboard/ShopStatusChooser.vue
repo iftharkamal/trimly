@@ -38,14 +38,14 @@ function choose(value: boolean) {
         :disabled="saving"
         class="flex flex-col items-start gap-2 rounded-xl p-4 text-left ring-1 transition-colors disabled:opacity-60"
         :class="isOpen === choice.value
-          ? (choice.value ? 'bg-success/10 ring-success' : 'bg-elevated ring-inverted')
+          ? (choice.value ? 'bg-success/10 ring-success' : 'bg-error/10 ring-error')
           : 'ring-default hover:bg-elevated'"
         @click="choose(choice.value)"
       >
         <span class="flex items-center gap-2 font-semibold text-highlighted">
           <span
             class="size-2.5 rounded-full"
-            :class="choice.value ? 'bg-success' : 'bg-dimmed'"
+            :class="choice.value ? 'bg-success' : 'bg-error'"
           />
           {{ choice.label }}
         </span>

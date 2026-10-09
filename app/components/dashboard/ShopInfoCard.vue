@@ -43,7 +43,7 @@ async function copyLink() {
         </div>
         <UBadge
           :label="shop.isOpen ? 'Open online' : 'Closed online'"
-          :color="shop.isOpen ? 'success' : 'neutral'"
+          :color="shop.isOpen ? 'success' : 'error'"
           variant="subtle"
         />
       </div>

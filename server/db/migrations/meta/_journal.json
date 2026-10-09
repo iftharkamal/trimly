@@ -71,6 +71,13 @@
       "when": 1791537426981,
       "tag": "0009_staff_chairs",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1791565203576,
+      "tag": "0010_staff_can_open_close",
+      "breakpoints": true
     }
   ]
 }

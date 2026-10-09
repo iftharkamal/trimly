@@ -21,23 +21,24 @@ const bufferChoices = computed(() => [...new Set([...BUFFER_OPTIONS, buffer.valu
   .map(minutes => ({ label: minutes === 0 ? 'No gap' : `${minutes} minutes`, value: minutes })))
 const savingBuffer = ref(false)
 
-// Open or closed to online customers (staff can also change it from the queue screen).
-const savingStatus = ref(false)
+// Whether barbers and receptionists may open and close the shop from the queue
+// screen (opening and closing itself happens there, not here).
+const savingPermission = ref(false)
 
-async function setShopOpen(isOpen: boolean) {
-  savingStatus.value = true
+async function setStaffCanOpenClose(allowed: boolean) {
+  savingPermission.value = true
   try {
-    await $fetch('/api/dashboard/shop', { method: 'PATCH', body: { isOpen } })
+    await $fetch('/api/dashboard/shop', { method: 'PATCH', body: { staffCanOpenClose: allowed } })
     await refreshMe()
-    toast.add(isOpen
-      ? { title: 'Shop is open', description: 'Customers can join online.', color: 'success', icon: 'i-lucide-door-open' }
-      : { title: 'Shop is closed', description: 'Online joining is paused. You can still add walk-ins.', color: 'neutral', icon: 'i-lucide-door-closed' })
+    toast.add(allowed
+      ? { title: 'Staff can open and close the shop', color: 'success', icon: 'i-lucide-check' }
+      : { title: 'Only you can open and close the shop now', color: 'neutral', icon: 'i-lucide-lock' })
   }
   catch (caught) {
     toast.add({ title: 'Could not update', description: getApiErrorMessage(caught), color: 'error', icon: 'i-lucide-circle-alert' })
   }
   finally {
-    savingStatus.value = false
+    savingPermission.value = false
   }
 }
 
@@ -157,16 +158,19 @@ async function onSave() {
       <UCard v-if="me?.shop">
         <template #header>
           <h2 class="font-semibold text-highlighted">
-            Shop status
+            Staff permissions
           </h2>
           <p class="mt-1 text-sm text-muted">
-            Whether customers can join your queue online. Your staff can change this from the queue screen too.
+            What barbers and receptionists can do.
           </p>
         </template>
-        <ShopStatusChooser
-          :is-open="me.shop.isOpen"
-          :saving="savingStatus"
-          @change="setShopOpen"
+        <USwitch
+          :model-value="me.shop.staffCanOpenClose"
+          :loading="savingPermission"
+          :disabled="savingPermission"
+          label="Staff can open and close the shop"
+          description="From the Open / Closed status on the queue screen. When off, only you can."
+          @update:model-value="setStaffCanOpenClose"
         />
       </UCard>
 

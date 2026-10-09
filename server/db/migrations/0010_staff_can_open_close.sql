@@ -1,0 +1,1 @@
+ALTER TABLE "shops" ADD COLUMN "staff_can_open_close" boolean DEFAULT true NOT NULL;

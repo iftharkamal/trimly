@@ -344,7 +344,8 @@ timestamps). Nothing about shops is stored on the Better Auth user.
 | Queue, walk-ins, start/complete/cancel/no-show, payments | ✓ | ✓ | ✓ |
 | Appointments (list, book, check in, cancel, no-show) | ✓ | ✓ | ✓ |
 | `GET /api/dashboard`, `GET /api/dashboard/hours`, notifications | ✓ | ✓ | ✓ |
-| Open/close the shop (`PATCH /api/dashboard/shop` `isOpen`) | ✓ | ✓ | ✓ |
+| Open/close the shop (`PATCH /api/dashboard/shop` `isOpen`) | ✓ | ✓ while the owner allows it | ✓ while the owner allows it |
+| Allow staff to open/close (`staffCanOpenClose`) | ✓ | 403 `INSUFFICIENT_ROLE` | 403 |
 | Time between customers (`PATCH /api/dashboard/shop` `serviceBufferMinutes`) | ✓ | 403 `INSUFFICIENT_ROLE` | 403 |
 | Today's takings (`today.revenueMinor` on `GET /api/dashboard`) | ✓ | `null` | `null` |
 | View services (`GET /api/shop/services`) | ✓ | ✓ | ✓ |
@@ -532,10 +533,11 @@ OWNER only; for barbers and receptionists it's `null`.
 The shop's queue settings, for the session's shop.
 
 - **Body** (strict, at least one):
-  - `isOpen`: boolean, **any member** (owner, barber, receptionist). Open or close the shop to online
-    joins, so whoever opens up in the morning can switch it on; walk-ins can always be added.
-  - `serviceBufferMinutes`: **OWNER only** (403 `INSUFFICIENT_ROLE` otherwise, and a body with both
-    fields changes neither); whole minutes, 0–60 (default 5). The gap between one customer finishing
+  - `isOpen`: boolean. Open or close the shop to online joins; walk-ins can always be added. The
+    **owner** always; **staff** (barbers, receptionists) while `staffCanOpenClose` is on, so whoever
+    opens up in the morning can switch it on. When it's off, staff get 403 `INSUFFICIENT_ROLE`.
+  - `staffCanOpenClose`: boolean, **OWNER only** (default `true`; Settings → Staff permissions).
+  - `serviceBufferMinutes`: **OWNER only**; whole minutes, 0–60 (default 5). The gap between one customer finishing
     and the next starting (cleaning up, taking payment). It's added after every service in every
     waiting-time estimate, so changing it updates all ETAs on the next refresh, for staff and on
     customers' tracking links.

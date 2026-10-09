@@ -67,6 +67,9 @@ const todaySummary = computed(() => {
   return `Today: ${parts.join(' · ')}`
 })
 
+// The owner always; staff while the owner allows it (Settings). The server checks too.
+const canOpenClose = computed(() => dashboard.value?.member.role === 'OWNER' || !!dashboard.value?.shop.staffCanOpenClose)
+
 // The signed-in barber's own chair first.
 const myBarberId = computed(() => dashboard.value?.member.barberId ?? null)
 const lanes = computed(() => [...(queue.value?.barbers ?? [])].sort((a, b) => Number(b.barber.id === myBarberId.value) - Number(a.barber.id === myBarberId.value)))
@@ -184,6 +187,7 @@ async function onConfirm() {
             <ShopStatusChip
               :is-open="dashboard.shop.isOpen"
               :saving="updatingOpen"
+              :editable="canOpenClose"
               @change="setOpen"
             />
           </div>

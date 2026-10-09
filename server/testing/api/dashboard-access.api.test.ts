@@ -47,6 +47,32 @@ describe('dashboard access', () => {
     expect(response.html).toContain('Open menu to sign out')
   })
 
+  it('shows the real shop of the signed-in user: name, owner and details', async () => {
+    const { cookie } = await signUp(`access-real-${randomUUID().slice(0, 8)}@trimly.test`, 'Nabil Ahmed')
+    const shopName = `Nabil's Salon ${randomUUID().slice(0, 4)}`
+    const created = await request('POST', '/api/onboarding/shop', {
+      cookie,
+      body: { name: shopName, phone: '98765 43210', address: 'Broadway, Kochi', currency: 'INR' }
+    })
+    expect(created.status).toBe(201)
+
+    const response = await page('/dashboard', cookie)
+    expect(response.status).toBe(200)
+    for (const text of [
+      shopName.replace('\'', '&#39;'),
+      'Good',
+      'Nabil Ahmed',
+      '+91 98765 43210',
+      'Broadway, Kochi',
+      `/shop/${created.json.data.slug}`,
+      'Your role: Owner'
+    ]) {
+      expect(response.html, text).toContain(text)
+    }
+    // Nothing from another shop leaks in.
+    expect(response.html).not.toContain('Faisal')
+  })
+
   it('keeps the session across page refreshes', async () => {
     for (let refresh = 0; refresh < 3; refresh++) {
       expect((await page('/dashboard', owner.cookie)).status).toBe(200)

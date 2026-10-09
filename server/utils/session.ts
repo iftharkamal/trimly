@@ -7,7 +7,7 @@
 //   requireUser(event)                  … or 401 / 403
 //   requireShopMember(event, shopId?)   … and their membership, or 403 (409 if ambiguous)
 //   requireRole(event, roles, shopId?)  … with one of these roles, or 403
-//   requireShop(event, shopId?)         … plus the shop itself
+//   getCurrentShopContext(event, shopId?) { user, membership, shop }
 //   getShopMember(event, shopId)        membership in this shop, or null (public routes)
 import type { H3Event } from 'h3'
 import type { MemberRole } from '../../shared/constants'
@@ -118,10 +118,25 @@ export async function requireRole(event: H3Event, roles: readonly MemberRole[], 
   return member
 }
 
-/** Like requireShopMember, with the shop's profile. */
-export async function requireShop(event: H3Event, shopId?: string): Promise<ShopMember & { shop: ShopProfile }> {
+export interface ShopContext {
+  user: CurrentUser
+  membership: { id: string, role: MemberRole }
+  shop: ShopProfile
+}
+
+/**
+ * Everything a dashboard request is about: the signed-in user → their
+ * membership → the shop. Requires authentication (401) and a membership
+ * (403; 409 if the shop would have to be guessed). With `shopId` (from the
+ * URL) the user must belong to that shop.
+ */
+export async function getCurrentShopContext(event: H3Event, shopId?: string): Promise<ShopContext> {
   const member = await requireShopMember(event, shopId)
-  return { ...member, shop: await getShopProfile(member.shopId) }
+  return {
+    user: member.user,
+    membership: { id: member.membershipId, role: member.role },
+    shop: await getShopProfile(member.shopId)
+  }
 }
 
 /** The requester's membership in this shop, or null (signed out, unverified, or not a member). Never throws. */

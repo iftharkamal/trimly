@@ -42,7 +42,7 @@ describe('a receptionist', () => {
   })
 
   it('can\'t do owner-only things', async () => {
-    for (const [method, path, body] of [['GET', '/api/reports?period=day'], ['GET', '/api/dashboard/services'], ['PATCH', '/api/dashboard/shop', { isOpen: false }]] as const) {
+    for (const [method, path, body] of [['GET', '/api/reports?period=day'], ['POST', '/api/shop/services', { name: 'Shave', durationMinutes: 15, priceMinor: 8000 }], ['PATCH', '/api/dashboard/shop', { isOpen: false }]] as const) {
       expectError(await request(method, path, { cookie: receptionist.cookie, body }), 403, 'INSUFFICIENT_ROLE')
     }
   })

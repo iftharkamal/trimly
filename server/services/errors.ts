@@ -2,6 +2,7 @@ export type DomainErrorCode =
   | 'SHOP_NOT_FOUND'
   | 'BARBER_NOT_FOUND'
   | 'SERVICE_NOT_FOUND'
+  | 'SERVICE_IN_USE'
   | 'NO_BARBER_AVAILABLE'
   | 'ENTRY_NOT_FOUND'
   | 'PHONE_REQUIRED'

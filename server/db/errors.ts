@@ -24,3 +24,8 @@ export function isExclusionViolation(error: unknown, constraint: string): boolea
   const pgError = findPgError(error)
   return pgError?.code === '23P01' && pgError.constraint === constraint
 }
+
+/** A row is still referenced by another table (e.g. deleting a service that has visits). */
+export function isForeignKeyViolation(error: unknown): boolean {
+  return findPgError(error)?.code === '23503'
+}

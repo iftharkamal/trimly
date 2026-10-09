@@ -262,9 +262,9 @@ describe('services management', () => {
 
   it('adds, edits and archives services; customers only see active ones', async () => {
     const owner = await ownerWithShop()
-    expect((await request('GET', '/api/dashboard/services', { cookie: owner.cookie })).json.data).toEqual([])
+    expect((await request('GET', '/api/shop/services', { cookie: owner.cookie })).json.data).toEqual([])
 
-    const created = await request('POST', '/api/dashboard/services', {
+    const created = await request('POST', '/api/shop/services', {
       body: { name: 'Haircut', durationMinutes: 20, priceMinor: 15000 },
       cookie: owner.cookie
     })
@@ -272,14 +272,14 @@ describe('services management', () => {
     expect(created.json.data).toMatchObject({ name: 'Haircut', durationMinutes: 20, priceMinor: 15000, isActive: true })
     const id = created.json.data.id as string
 
-    const edited = await request('PATCH', `/api/dashboard/services/${id}`, { body: { priceMinor: 18000 }, cookie: owner.cookie })
+    const edited = await request('PATCH', `/api/shop/services/${id}`, { body: { priceMinor: 18000 }, cookie: owner.cookie })
     expect(edited.json.data).toMatchObject({ priceMinor: 18000, name: 'Haircut' })
     expect((await request('GET', `/api/shops/${owner.shopId}/services`)).json.data).toHaveLength(1)
 
-    const archived = await request('PATCH', `/api/dashboard/services/${id}`, { body: { isActive: false }, cookie: owner.cookie })
+    const archived = await request('PATCH', `/api/shop/services/${id}`, { body: { isActive: false }, cookie: owner.cookie })
     expect(archived.json.data.isActive).toBe(false)
     expect((await request('GET', `/api/shops/${owner.shopId}/services`)).json.data).toEqual([])
-    expect((await request('GET', '/api/dashboard/services', { cookie: owner.cookie })).json.data).toHaveLength(1)
+    expect((await request('GET', '/api/shop/services', { cookie: owner.cookie })).json.data).toHaveLength(1)
   })
 
   it('validates service details', async () => {
@@ -290,25 +290,25 @@ describe('services management', () => {
       { name: 'Negative', durationMinutes: 20, priceMinor: -1 },
       { name: 'Extra', durationMinutes: 20, priceMinor: 100, shopId: owner.shopId }
     ]) {
-      expectError(await request('POST', '/api/dashboard/services', { body, cookie: owner.cookie }), 400, 'VALIDATION_ERROR')
+      expectError(await request('POST', '/api/shop/services', { body, cookie: owner.cookie }), 400, 'VALIDATION_ERROR')
     }
   })
 
   it('only lets an owner change their own shop’s services', async () => {
     const owner = await ownerWithShop()
     const other = await ownerWithShop()
-    const service = await request('POST', '/api/dashboard/services', {
+    const service = await request('POST', '/api/shop/services', {
       body: { name: 'Beard', durationMinutes: 10, priceMinor: 10000 },
       cookie: owner.cookie
     })
 
     expectError(
-      await request('PATCH', `/api/dashboard/services/${service.json.data.id}`, { body: { priceMinor: 1 }, cookie: other.cookie }),
+      await request('PATCH', `/api/shop/services/${service.json.data.id}`, { body: { priceMinor: 1 }, cookie: other.cookie }),
       404,
       'SERVICE_NOT_FOUND'
     )
     const noShop = await signUp(uniqueEmail('noshop'))
-    expectError(await request('GET', '/api/dashboard/services', { cookie: noShop.cookie }), 403, 'FORBIDDEN')
-    expectError(await request('GET', '/api/dashboard/services'), 401, 'UNAUTHENTICATED')
+    expectError(await request('GET', '/api/shop/services', { cookie: noShop.cookie }), 403, 'FORBIDDEN')
+    expectError(await request('GET', '/api/shop/services'), 401, 'UNAUTHENTICATED')
   })
 })

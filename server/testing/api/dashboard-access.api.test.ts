@@ -92,7 +92,7 @@ describe('dashboard access', () => {
   })
 
   it('answers 401 to API requests without a session', async () => {
-    for (const path of ['/api/me', '/api/dashboard', '/api/dashboard/appointments?from=2026-10-01&to=2026-10-02', '/api/dashboard/services', '/api/reports?period=day', '/api/dashboard/hours', '/api/dashboard/notifications']) {
+    for (const path of ['/api/me', '/api/dashboard', '/api/dashboard/appointments?from=2026-10-01&to=2026-10-02', '/api/shop/services', '/api/reports?period=day', '/api/dashboard/hours', '/api/dashboard/notifications']) {
       expectError(await request('GET', path), 401, 'UNAUTHENTICATED')
     }
     expectError(await request('PATCH', '/api/dashboard/shop', { body: { isOpen: false } }), 401, 'UNAUTHENTICATED')

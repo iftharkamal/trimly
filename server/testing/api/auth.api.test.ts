@@ -252,8 +252,7 @@ describe('authorization by shop role', () => {
   })
 
   const OWNER_ONLY: [method: 'GET' | 'POST' | 'PATCH' | 'PUT', path: string, body?: unknown][] = [
-    ['GET', '/api/dashboard/services'],
-    ['POST', '/api/dashboard/services', { name: 'Shave', durationMinutes: 15, priceMinor: 8000 }],
+    ['POST', '/api/shop/services', { name: 'Shave', durationMinutes: 15, priceMinor: 8000 }],
     ['PATCH', '/api/dashboard/shop', { isOpen: false }],
     ['PUT', '/api/dashboard/hours', { days: [] }],
     ['GET', '/api/reports?period=day']
@@ -262,7 +261,8 @@ describe('authorization by shop role', () => {
     ['GET', '/api/dashboard'],
     ['GET', '/api/dashboard/hours'],
     ['GET', '/api/dashboard/notifications'],
-    ['GET', '/api/dashboard/appointments?from=2026-10-01&to=2026-10-02']
+    ['GET', '/api/dashboard/appointments?from=2026-10-01&to=2026-10-02'],
+    ['GET', '/api/shop/services']
   ]
 
   it('reports the member\'s role', async () => {
@@ -324,7 +324,7 @@ describe('authorization by shop role', () => {
   })
 
   it('never takes the shop or user from the request', async () => {
-    const response = await request('POST', '/api/dashboard/services', {
+    const response = await request('POST', '/api/shop/services', {
       cookie: owner.cookie,
       body: { name: 'Shave', durationMinutes: 15, priceMinor: 8000, shopId: randomUUID() }
     })

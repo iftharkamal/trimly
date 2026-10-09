@@ -45,7 +45,7 @@ request schemas are in [`shared/schemas/queue.ts`](../shared/schemas/queue.ts).
 | 401 | `UNAUTHENTICATED` — no valid session |
 | 403 | `FORBIDDEN` — signed in, but not a member of the shop · `INSUFFICIENT_ROLE` — a member whose role can't do this · `ACCOUNT_NOT_VERIFIED` · `FORBIDDEN_ORIGIN` — sent by another website |
 | 404 | `SHOP_NOT_FOUND`, `SERVICE_NOT_FOUND`, `BARBER_NOT_FOUND`, `ENTRY_NOT_FOUND` |
-| 409 | `SHOP_SELECTION_REQUIRED`, `ALREADY_HAS_SHOP`, `ALREADY_IN_QUEUE`, `BARBER_BUSY`, `INVALID_TRANSITION`, `NO_BARBER_AVAILABLE`, `SHOP_CLOSED`, `SLOT_TAKEN`, `SLOT_UNAVAILABLE`, `ALREADY_BOOKED` |
+| 409 | `SHOP_SELECTION_REQUIRED`, `ALREADY_HAS_SHOP`, `SERVICE_IN_USE`, `ALREADY_IN_QUEUE`, `BARBER_BUSY`, `INVALID_TRANSITION`, `NO_BARBER_AVAILABLE`, `SHOP_CLOSED`, `SLOT_TAKEN`, `SLOT_UNAVAILABLE`, `ALREADY_BOOKED` |
 | 429 | `RATE_LIMITED` — too many public joins or bookings; see `Retry-After` |
 | 500 | `INTERNAL_ERROR` |
 
@@ -345,7 +345,8 @@ timestamps). Nothing about shops is stored on the Better Auth user.
 | Appointments (list, book, check in, cancel, no-show) | ✓ | ✓ | ✓ |
 | `GET /api/dashboard`, `GET /api/dashboard/hours`, notifications | ✓ | ✓ | ✓ |
 | Open/close the shop (`PATCH /api/dashboard/shop`) | ✓ | 403 `INSUFFICIENT_ROLE` | 403 |
-| Services (`/api/dashboard/services*`), `PUT /api/dashboard/hours` | ✓ | 403 `INSUFFICIENT_ROLE` | 403 |
+| View services (`GET /api/shop/services`) | ✓ | ✓ | ✓ |
+| Add, edit, archive or delete services (`/api/shop/services*`), `PUT /api/dashboard/hours` | ✓ | 403 `INSUFFICIENT_ROLE` | 403 |
 | Reports (`GET /api/reports`) | ✓ | 403 `INSUFFICIENT_ROLE` | 403 |
 
 **Which shop a request is about** (signed-in user → membership → shop):
@@ -400,28 +401,34 @@ check is locked per user). For now a person who belongs to a shop can't create a
 **Errors:** 400 `VALIDATION_ERROR` (with `details` per field) · 401 · 403 `ACCOUNT_NOT_VERIFIED` ·
 409 `ALREADY_HAS_SHOP`.
 
-## Managing services (owner)
+## Managing services
+
+The signed-in member's own shop's services. The shop always comes from the session (user →
+membership → shop); a body can't name one, and another shop's service answers 404. A new shop
+starts with no services: the development seed's services belong to the seeded shop only.
 
 Types: `ManagedServiceDto` in [`shared/types/dashboard.ts`](../shared/types/dashboard.ts); schemas in
-[`shared/schemas/service.ts`](../shared/schemas/service.ts).
+[`shared/schemas/service.ts`](../shared/schemas/service.ts). A service:
 
-### `GET /api/dashboard/services`
+```json
+{ "id": "…", "shopId": "…", "name": "Haircut", "priceMinor": 15000, "durationMinutes": 20, "isActive": true, "createdAt": "…", "updatedAt": "…" }
+```
 
-All the shop's services, active first: `[{ "id", "name", "durationMinutes", "priceMinor", "isActive" }]`.
+`priceMinor` is the price in minor units (paise); `isActive: false` means archived.
 
-### `POST /api/dashboard/services`
+| Endpoint | Who |
+|---|---|
+| `GET /api/shop/services` | any member: every service, active first, archived included |
+| `POST /api/shop/services` | OWNER. Body (strict): `{ "name" (1–60), "durationMinutes" (5–480), "priceMinor" (0–10,000,000) }` → 201 |
+| `PATCH /api/shop/services/:id` | OWNER. Body (strict): any of `name`, `durationMinutes`, `priceMinor`, `isActive` (at least one). `isActive: false` archives: customers can't choose it, past visits keep it |
+| `DELETE /api/shop/services/:id` | OWNER. Deletes a never-used service for good → `{ "id" }` |
 
-- **Body** (strict): `{ "name" (1–60), "durationMinutes" (5–480), "priceMinor" (0–10,000,000) }`.
-- **201:** the new service.
+A service with past visits or bookings can't be deleted: 409 `SERVICE_IN_USE` (archive it instead).
+That's decided by the database in the same statement, so a booking made at the same moment can't be
+orphaned.
 
-### `PATCH /api/dashboard/services/:id`
-
-- **Body** (strict): any of `name`, `durationMinutes`, `priceMinor`, `isActive` (at least one).
-  `isActive: false` archives the service: customers can't choose it, past visits keep it.
-- **200:** the updated service.
-
-**Errors (all three):** 400 `VALIDATION_ERROR` · 401 · 403 `FORBIDDEN` · 404 `SERVICE_NOT_FOUND`
-(including another shop's service).
+**Errors:** 400 `VALIDATION_ERROR` · 401 `UNAUTHENTICATED` · 403 `FORBIDDEN` (no shop) / `INSUFFICIENT_ROLE`
+(not the owner) · 404 `SERVICE_NOT_FOUND` (including another shop's) · 409 `SERVICE_IN_USE`.
 
 ## Shops and services
 

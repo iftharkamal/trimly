@@ -1,8 +1,10 @@
 // The "services" module (haircut, beard, ...). Named catalog to avoid services/services.ts.
 import { and, asc, desc, eq } from 'drizzle-orm'
 import { useDb } from '../db'
+import { isForeignKeyViolation } from '../db/errors'
 import { services, shops } from '../db/schema'
 import type { CreateServiceBody, UpdateServiceBody } from '../../shared/schemas/service'
+import type { ManagedServiceDto } from '../../shared/types/dashboard'
 import { DomainError } from './errors'
 
 export interface CatalogService {
@@ -46,15 +48,21 @@ export async function getActiveService(shopId: string, serviceId: string): Promi
 }
 
 export interface ManagedService extends CatalogService {
+  shopId: string
   isActive: boolean
+  createdAt: Date
+  updatedAt: Date
 }
 
 const MANAGED_COLUMNS = {
   id: services.id,
+  shopId: services.shopId,
   name: services.name,
   durationMinutes: services.durationMinutes,
   priceMinor: services.priceMinor,
-  isActive: services.isActive
+  isActive: services.isActive,
+  createdAt: services.createdAt,
+  updatedAt: services.updatedAt
 }
 
 /** Every service of the shop, active first, for the owner to manage. */
@@ -88,4 +96,33 @@ export async function updateService(shopId: string, serviceId: string, input: Up
     throw new DomainError('SERVICE_NOT_FOUND', 404, 'Service not found')
   }
   return service
+}
+
+/**
+ * Deletes one of the shop's services for good, if nothing refers to it. A
+ * service with past visits or bookings is refused (409 SERVICE_IN_USE): the
+ * database's foreign keys decide, in the same statement, so a booking made at
+ * the same moment can't be orphaned. Archive those instead.
+ */
+export async function deleteService(shopId: string, serviceId: string): Promise<void> {
+  let deleted: { id: string }[]
+  try {
+    deleted = await useDb()
+      .delete(services)
+      .where(and(eq(services.id, serviceId), eq(services.shopId, shopId)))
+      .returning({ id: services.id })
+  }
+  catch (error) {
+    if (isForeignKeyViolation(error)) {
+      throw new DomainError('SERVICE_IN_USE', 409, 'This service has past visits or bookings, so it can\'t be deleted. Archive it instead.')
+    }
+    throw error
+  }
+  if (!deleted.length) {
+    throw new DomainError('SERVICE_NOT_FOUND', 404, 'Service not found')
+  }
+}
+
+export function toManagedServiceDto(service: ManagedService): ManagedServiceDto {
+  return { ...service, createdAt: service.createdAt.toISOString(), updatedAt: service.updatedAt.toISOString() }
 }

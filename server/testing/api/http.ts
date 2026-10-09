@@ -23,7 +23,7 @@ export interface ApiResponse {
 }
 
 export async function request(
-  method: 'GET' | 'POST' | 'PATCH' | 'PUT',
+  method: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE',
   path: string,
   // origin: what a browser would send; defaults to the app itself, null sends none (not a browser).
   options: { body?: unknown, rawBody?: string, cookie?: string, ip?: string, origin?: string | null } = {}

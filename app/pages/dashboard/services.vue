@@ -9,7 +9,26 @@ const route = useRoute()
 const { shop } = useCurrentUser()
 const currency = computed(() => shop.value?.currency ?? 'INR')
 
-const { services, error, refresh, saving, toggling, save, setActive } = await useManagedServices()
+const { services, error, refresh, saving, toggling, deleting, save, setActive, remove } = await useManagedServices()
+
+// Delete asks first; a service with past visits is refused (archive offered).
+const confirmingDelete = ref<ManagedServiceDto | null>(null)
+const confirmDeleteOpen = computed({
+  get: () => confirmingDelete.value !== null,
+  set: (open) => {
+    if (!open) {
+      confirmingDelete.value = null
+    }
+  }
+})
+
+async function onConfirmDelete() {
+  const service = confirmingDelete.value
+  if (service) {
+    await remove(service)
+    confirmingDelete.value = null
+  }
+}
 
 const active = computed(() => (services.value ?? []).filter(service => service.isActive))
 const archived = computed(() => (services.value ?? []).filter(service => !service.isActive))
@@ -99,6 +118,14 @@ async function onSave(input: CreateServiceBody) {
             :loading="toggling === service.id"
             @click="setActive(service, false)"
           />
+          <UButton
+            icon="i-lucide-trash-2"
+            color="neutral"
+            variant="ghost"
+            :aria-label="`Delete ${service.name}`"
+            :loading="deleting === service.id"
+            @click="confirmingDelete = service"
+          />
         </li>
       </ul>
       <div
@@ -154,6 +181,15 @@ async function onSave(input: CreateServiceBody) {
               :loading="toggling === service.id"
               @click="setActive(service, true)"
             />
+            <UButton
+              icon="i-lucide-trash-2"
+              color="neutral"
+              variant="ghost"
+              size="sm"
+              :aria-label="`Delete ${service.name}`"
+              :loading="deleting === service.id"
+              @click="confirmingDelete = service"
+            />
           </li>
         </ul>
       </UCard>
@@ -165,6 +201,15 @@ async function onSave(input: CreateServiceBody) {
       :currency="currency"
       :saving="saving"
       @save="onSave"
+    />
+
+    <ConfirmModal
+      v-model:open="confirmDeleteOpen"
+      :title="`Delete ${confirmingDelete?.name ?? 'service'}?`"
+      description="This removes it for good. Services with past visits can't be deleted; archive those instead."
+      confirm-label="Delete service"
+      :loading="deleting !== null"
+      @confirm="onConfirmDelete"
     />
   </UContainer>
 </template>

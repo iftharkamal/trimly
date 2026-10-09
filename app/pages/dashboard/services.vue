@@ -2,12 +2,12 @@
 import type { CreateServiceBody } from '#shared/schemas/service'
 import type { ManagedServiceDto } from '#shared/types/dashboard'
 
-definePageMeta({ layout: 'dashboard', middleware: ['auth', 'shop', 'owner'] })
+definePageMeta({ layout: 'dashboard', middleware: 'auth', shop: 'required', role: 'OWNER' })
 useHead({ title: 'Services · Trimly' })
 
 const route = useRoute()
-const { data: me } = await useMe()
-const currency = computed(() => me.value?.shop?.currency ?? 'INR')
+const { shop } = useCurrentUser()
+const currency = computed(() => shop.value?.currency ?? 'INR')
 
 const { services, error, refresh, saving, toggling, save, setActive } = await useManagedServices()
 

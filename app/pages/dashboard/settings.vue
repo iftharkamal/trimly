@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { openingHoursSchema, type OpeningHours } from '#shared/schemas/hours'
 
-definePageMeta({ layout: 'dashboard', middleware: ['auth', 'shop'] })
+definePageMeta({ layout: 'dashboard', middleware: 'auth', shop: 'required' })
 useHead({ title: 'Settings · Trimly' })
 
 const { hours, error, refresh, saving, save } = await useOpeningHours()
-const { data: me, refresh: refreshMe } = await useMe()
+const { me, refresh: refreshMe } = useCurrentUser()
 const toast = useToast()
 // Only the owner edits the opening hours (the server enforces it too).
 const isOwner = computed(() => me.value?.role === 'OWNER')

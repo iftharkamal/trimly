@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import type { MeDto } from '#shared/types/account'
+import type { DropdownMenuItem } from '@nuxt/ui'
 
 const route = useRoute()
-const { signingOut, signOut } = useSignOut()
+// Who is signed in, as the server reported it (loaded by the auth middleware).
+const { user, role, contact, signingOut, signOut } = useCurrentUser()
 
 // Shop alerts on every dashboard page: online joins, bookings, cancellations.
 const { permission, ready: alertsReady, enable, alert } = useBrowserNotifications()
@@ -30,8 +31,7 @@ const bell = computed(() => {
   }
 })
 
-// Loaded by the page guards; barbers don't get the owner-only pages.
-const { data: me } = useNuxtData<MeDto>('me')
+// Barbers don't get the owner-only pages (the server refuses them anyway).
 const allLinks = [
   { label: 'Queue', to: '/dashboard', icon: 'i-lucide-list-ordered', ownerOnly: false },
   { label: 'Appointments', to: '/dashboard/appointments', icon: 'i-lucide-calendar', ownerOnly: false },
@@ -39,7 +39,16 @@ const allLinks = [
   { label: 'Reports', to: '/dashboard/reports', icon: 'i-lucide-chart-column', ownerOnly: true },
   { label: 'Settings', to: '/dashboard/settings', icon: 'i-lucide-settings', ownerOnly: false }
 ]
-const links = computed(() => allLinks.filter(link => !link.ownerOnly || me.value?.role === 'OWNER'))
+const links = computed(() => allLinks.filter(link => !link.ownerOnly || role.value === 'OWNER'))
+
+const accountMenu = computed<DropdownMenuItem[][]>(() => [
+  [
+    { type: 'label', label: user.value?.name ?? '' },
+    { type: 'label', label: contact.value, class: 'pt-0 font-normal text-muted' }
+  ],
+  [{ label: 'Settings', icon: 'i-lucide-settings', to: '/dashboard/settings' }],
+  [{ label: 'Sign out', icon: 'i-lucide-log-out', onSelect: () => signOut() }]
+])
 </script>
 
 <template>
@@ -92,17 +101,32 @@ const links = computed(() => allLinks.filter(link => !link.ownerOnly || me.value
             @click="enable"
           />
           <UColorModeButton size="sm" />
-          <UButton
-            icon="i-lucide-log-out"
-            color="neutral"
-            variant="ghost"
-            size="sm"
-            aria-label="Sign out"
-            :loading="signingOut"
-            @click="signOut"
+          <UDropdownMenu
+            :items="accountMenu"
+            :content="{ align: 'end' }"
           >
-            <span class="hidden sm:inline">Sign out</span>
-          </UButton>
+            <UButton
+              color="neutral"
+              variant="ghost"
+              size="sm"
+              class="gap-2"
+              :loading="signingOut"
+              :aria-label="`Account: ${user?.name ?? ''}. Open menu to sign out`"
+            >
+              <UAvatar
+                :alt="user?.name"
+                size="xs"
+              />
+              <span class="hidden max-w-40 text-left lg:block">
+                <span class="block truncate text-sm font-medium text-highlighted">{{ user?.name }}</span>
+                <span class="block truncate text-xs text-muted">{{ contact }}</span>
+              </span>
+              <UIcon
+                name="i-lucide-chevron-down"
+                class="hidden size-4 text-dimmed lg:block"
+              />
+            </UButton>
+          </UDropdownMenu>
         </div>
       </UContainer>
     </header>

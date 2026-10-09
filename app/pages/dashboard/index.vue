@@ -4,7 +4,7 @@ import type { PaymentMethod } from '#shared/constants'
 import type { PaymentInput } from '#shared/schemas/payment'
 import type { QueueEntryDto, WaitingEntryDto } from '#shared/types/queue'
 
-definePageMeta({ layout: 'dashboard', middleware: ['auth', 'shop'] })
+definePageMeta({ layout: 'dashboard', middleware: 'auth', shop: 'required' })
 useHead({ title: 'Live queue · Trimly' })
 
 const {

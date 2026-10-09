@@ -4,12 +4,11 @@ import type { SlugAvailabilityDto } from '#shared/types/account'
 import type { ApiSuccess } from '#shared/types/queue'
 import type { ShopProfileDto } from '#shared/types/shop'
 
-definePageMeta({ middleware: ['auth', 'no-shop'] })
+definePageMeta({ middleware: 'auth', shop: 'none' })
 useHead({ title: 'Set up your shop · Trimly' })
 
-const { data: me } = await useMe()
+const { me, signingOut, signOut } = useCurrentUser()
 const requestUrl = useRequestURL()
-const { signingOut, signOut } = useSignOut()
 
 // India first; otherwise people pick their own.
 function currencyFor(timeZone: string) {

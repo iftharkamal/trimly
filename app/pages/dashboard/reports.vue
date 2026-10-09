@@ -2,7 +2,7 @@
 import { REPORT_PERIODS, type ReportPeriod } from '#shared/constants'
 import type { ReportDto } from '#shared/types/report'
 
-definePageMeta({ layout: 'dashboard', middleware: ['auth', 'shop', 'owner'] })
+definePageMeta({ layout: 'dashboard', middleware: 'auth', shop: 'required', role: 'OWNER' })
 useHead({ title: 'Reports · Trimly' })
 
 const route = useRoute()

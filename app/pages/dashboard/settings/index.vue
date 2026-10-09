@@ -21,6 +21,26 @@ const bufferChoices = computed(() => [...new Set([...BUFFER_OPTIONS, buffer.valu
   .map(minutes => ({ label: minutes === 0 ? 'No gap' : `${minutes} minutes`, value: minutes })))
 const savingBuffer = ref(false)
 
+// Open or closed to online customers (staff can also change it from the queue screen).
+const savingStatus = ref(false)
+
+async function setShopOpen(isOpen: boolean) {
+  savingStatus.value = true
+  try {
+    await $fetch('/api/dashboard/shop', { method: 'PATCH', body: { isOpen } })
+    await refreshMe()
+    toast.add(isOpen
+      ? { title: 'Shop is open', description: 'Customers can join online.', color: 'success', icon: 'i-lucide-door-open' }
+      : { title: 'Shop is closed', description: 'Online joining is paused. You can still add walk-ins.', color: 'neutral', icon: 'i-lucide-door-closed' })
+  }
+  catch (caught) {
+    toast.add({ title: 'Could not update', description: getApiErrorMessage(caught), color: 'error', icon: 'i-lucide-circle-alert' })
+  }
+  finally {
+    savingStatus.value = false
+  }
+}
+
 async function saveBuffer() {
   savingBuffer.value = true
   try {
@@ -133,6 +153,22 @@ async function onSave() {
           class="size-5 text-dimmed"
         />
       </NuxtLink>
+
+      <UCard v-if="me?.shop">
+        <template #header>
+          <h2 class="font-semibold text-highlighted">
+            Shop status
+          </h2>
+          <p class="mt-1 text-sm text-muted">
+            Whether customers can join your queue online. Your staff can change this from the queue screen too.
+          </p>
+        </template>
+        <ShopStatusChooser
+          :is-open="me.shop.isOpen"
+          :saving="savingStatus"
+          @change="setShopOpen"
+        />
+      </UCard>
 
       <UCard>
         <template #header>

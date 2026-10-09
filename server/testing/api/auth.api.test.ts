@@ -253,7 +253,7 @@ describe('authorization by shop role', () => {
 
   const OWNER_ONLY: [method: 'GET' | 'POST' | 'PATCH' | 'PUT', path: string, body?: unknown][] = [
     ['POST', '/api/shop/services', { name: 'Shave', durationMinutes: 15, priceMinor: 8000 }],
-    ['PATCH', '/api/dashboard/shop', { isOpen: false }],
+    ['PATCH', '/api/dashboard/shop', { serviceBufferMinutes: 10 }],
     ['PUT', '/api/dashboard/hours', { days: [] }],
     ['GET', '/api/reports?period=day']
   ]

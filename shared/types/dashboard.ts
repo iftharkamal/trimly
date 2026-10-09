@@ -21,8 +21,8 @@ export interface DashboardDto {
     /** Joined today and not cancelled or marked no-show. */
     customers: number
     servicesCompleted: number
-    /** Payments received today, in minor units. */
-    revenueMinor: number
+    /** Payments received today, in minor units. Null for staff: only the owner sees takings. */
+    revenueMinor: number | null
   }
 }
 
